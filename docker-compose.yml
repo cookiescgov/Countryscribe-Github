@@ -21,11 +21,5 @@ services:
     environment:
       # Optional: Add any non-sensitive environment variables here if needed
       - TZ=America/Chicago
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              capabilities: [gpu]
 
     restart: unless-stopped

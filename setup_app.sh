@@ -53,6 +53,25 @@ else
 fi
 
 cd /opt/county-scribe
+
+# --- Hardware Detection & GPU Override ---
+if command -v nvidia-smi &> /dev/null && nvidia-smi &> /dev/null; then
+    echo "🎮  GPU Hardware Detected! Enabling Hardware Acceleration for Docker..."
+    cat <<EOF > docker-compose.override.yml
+services:
+  county-scribe:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              capabilities: [gpu]
+EOF
+else
+    echo "⚠️  No valid GPU bindings detected inside LXC. Engaging CPU Fallback mode..."
+    rm -f docker-compose.override.yml
+fi
+
 echo "🏗️  Building Docker containers. This process may take a few moments..."
 # Use plain progress to prevent Proxmox Web Shell from spamming animated lines
 BUILDKIT_PROGRESS=plain docker compose up -d --build
