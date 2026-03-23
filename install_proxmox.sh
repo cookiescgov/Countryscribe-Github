@@ -46,7 +46,8 @@ if [ "$ACTION" == "gpu_enable" ]; then
     bash -c "$(curl -fsSL https://raw.githubusercontent.com/cookiescgov/Countryscribe-Github/main/enable_gpu.sh)"
     exit 0
 elif [ "$ACTION" == "update" ]; then
-    CT_ID=$(whiptail --title "County Scribe Updater" --inputbox "Please enter the existing LXC ID to update:" 10 60 3>&1 1>&2 2>&3)
+    DEFAULT_CT=$(pct list | awk 'tolower($0) ~ /scribe/ {print $1}' | head -n 1)
+    CT_ID=$(whiptail --title "County Scribe Updater" --inputbox "Please enter the existing LXC ID to update:" 10 60 "$DEFAULT_CT" 3>&1 1>&2 2>&3)
     if [ -n "$CT_ID" ]; then
         echo "Updating County Scribe Operating System and Laboratory Code..."
         pct exec "$CT_ID" -- bash -c "update"

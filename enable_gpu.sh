@@ -9,7 +9,8 @@
 set -e
 
 # --- 1. Identify Container ---
-CT_ID=$(whiptail --title "County Scribe GPU Upgrade" --inputbox "Please enter the LXC ID of your existing County Scribe container:" 10 60 3>&1 1>&2 2>&3)
+DEFAULT_CT=$(pct list | awk 'tolower($0) ~ /scribe/ {print $1}' | head -n 1)
+CT_ID=$(whiptail --title "County Scribe GPU Upgrade" --inputbox "Please enter the LXC ID of your existing County Scribe container:" 10 60 "$DEFAULT_CT" 3>&1 1>&2 2>&3)
 if [ -z "$CT_ID" ]; then exit 0; fi
 
 CONF_FILE="/etc/pve/lxc/$CT_ID.conf"
