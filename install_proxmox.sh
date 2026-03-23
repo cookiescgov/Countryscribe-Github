@@ -36,8 +36,8 @@ cat <<EOF
      Created by: Luke Cook | Starke County Government IT
 EOF
 
-if ! ask_yesno "Welcome to the County Scribe installation service.\n\nWe are honored to assist you with this deployment.\n\nWould you be so kind as to proceed with the installation?"; then
-    echo "We most humbly respect your decision. Installation cancelled."
+if ! ask_yesno "Welcome to the County Scribe installation service.\n\nWould you like to proceed with the installation?"; then
+    echo "Installation cancelled by user."
     exit 0
 fi
 
@@ -61,7 +61,7 @@ CT_OS=$(whiptail --title "County Scribe (郡書記)" --menu "Please select your 
 if [ -z "$CT_OS" ]; then CT_OS="debian-13"; fi
 
 # --- 3. Host Preparation ---
-echo "We are most humbly preparing the host environment..."
+echo "Initializing the host environment..."
 if ! command -v git &> /dev/null; then
     apt-get update && apt-get install -y git &>/dev/null
 fi
@@ -77,7 +77,7 @@ EOF_HOOK
 chmod +x /var/lib/lxc/$CT_ID/mount_hook.sh
 
 # --- 4. Download Template ---
-echo "We are gracefully retrieving the $CT_OS template..."
+echo "Downloading the $CT_OS template..."
 pveam update &>/dev/null
 TEMPLATE=$(pveam available --section system | grep "$CT_OS" | head -n1 | awk '{print $2}')
 if [ -z "$TEMPLATE" ] && [ "$CT_OS" == "debian-13" ]; then
@@ -87,7 +87,7 @@ fi
 pveam download local "$TEMPLATE" &>/dev/null || true
 
 # --- 5. Container Creation ---
-echo "We are carefully constructing the LXC container $CT_ID..."
+echo "Creating LXC container $CT_ID..."
 pct create "$CT_ID" "local:vztmpl/$(basename $TEMPLATE)" \
     --hostname "$CT_HOSTNAME" \
     --password "$CT_PASSWORD" \
@@ -101,8 +101,8 @@ pct create "$CT_ID" "local:vztmpl/$(basename $TEMPLATE)" \
     --onboot 1 \
     --timezone host
 
-# --- 6. GPU Passthrough Configuration (Polite Auto-Detection) ---
-echo "We are humbly mapping the GPU pathways for container $CT_ID..."
+# --- 6. GPU Passthrough Configuration (Auto-Detection) ---
+echo "Configuring GPU passthrough for container $CT_ID..."
 CONF_FILE="/etc/pve/lxc/$CT_ID.conf"
 
 echo "# --- GPU PASSTHROUGH ---" >> $CONF_FILE
@@ -133,19 +133,19 @@ done
 if [ "$has_gpu" -eq 1 ]; then
     echo "lxc.hook.autodev: /var/lib/lxc/$CT_ID/mount_hook.sh" >> $CONF_FILE
 else
-    echo "⚠️ We apologize, but no GPU devices (/dev/nvidia* or /dev/dri/renderD*) were found on the host."
+    echo "⚠️ Warning: No GPU devices (/dev/nvidia* or /dev/dri/renderD*) were detected on the host."
 fi
 
 # --- 7. Application Setup ---
-echo "We are awakening the container and purifying the internal setup..."
+echo "Starting container and initiating internal setup..."
 pct start "$CT_ID"
 sleep 10
 
-echo "The Scribe is now preparing the internal laboratory (~15 minutes)..."
+echo "Executing final container configuration (~15 minutes)..."
 pct exec "$CT_ID" -- bash -c "$(curl -fsSL https://raw.githubusercontent.com/cookiescgov/Countryscribe-Github/main/setup_app.sh)"
 
 # --- 8. Finalization ---
-msg_box "The installation is complete. We are honored to have served you.\n\nStarke County Government: Secure. Local. Transparent."
+msg_box "Deployment finished successfully.\n\nStarke County Government: Secure. Local. Transparent."
 
 echo -e "\nCounty Scribe is ready!"
 IP=$(pct exec "$CT_ID" -- hostname -I | awk '{print $1}')
