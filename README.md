@@ -100,3 +100,10 @@ If you wish to modify the source code or contribute to the project:
 
 ## 📜 License
 This project is licensed under the **AGPL v3 License** to ensure that improvements made by the community remain available to all local governments.
+
+---
+
+## ⚖️ Disclaimer & No Warranty
+**County Scribe is experimental, open-source software provided "AS-IS" and without any warranty of any kind, express or implied.** 
+
+While the underlying AI models strive for high fidelity, automated transcriptions are inherently prone to hallucinatory errors, misattributions, or omissions. **Do not rely entirely on the automated output for legally binding public records without human verification.** The developers, contributors, and associated entities hold no liability for any claims, damages, or legal actions arising from the use of this software or its generated transcripts.
