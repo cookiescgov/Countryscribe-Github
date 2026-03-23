@@ -2,8 +2,6 @@
 **Official local, secure meeting transcription tool.**
 
 This version is optimized for **Proxmox LXC (Debian 13)** with full **NVIDIA GPU Passthrough**. 
-*Note: Speaker Identification (Diarization) has been removed from this build for maximum accuracy and simplicity.*
-
 ---
 
 ## 🛠️ Proxmox LXC Installation (The "One-Liner")
