@@ -68,7 +68,6 @@ RUN pip install --no-cache-dir --no-deps \
 
 # ---- Copy backend code ----
 COPY backend ./backend
-COPY uploads ./uploads
 
 # ---- Copy frontend build output ----
 COPY --from=frontend-build /app-frontend/build ./static
