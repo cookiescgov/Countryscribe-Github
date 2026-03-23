@@ -60,6 +60,12 @@ CT_OS=$(whiptail --title "County Scribe (郡書記)" --menu "Please select your 
     "ubuntu-24.04" "Ubuntu 24.04 LTS (Noble)" 3>&1 1>&2 2>&3)
 if [ -z "$CT_OS" ]; then CT_OS="debian-13"; fi
 
+# Ask for Hardware choice
+CT_HW=$(whiptail --title "County Scribe (郡書記)" --menu "Select the processing hardware for this container:" 15 70 2 \
+    "gpu" "NVIDIA GPU Passthrough (Recommended & Fast)" \
+    "cpu" "CPU Only (Universally Compatible but EXTREMELY Slow)" 3>&1 1>&2 2>&3)
+if [ -z "$CT_HW" ]; then CT_HW="gpu"; fi
+
 # --- 3. Host Preparation ---
 echo "Initializing the host environment..."
 if ! command -v git &> /dev/null; then

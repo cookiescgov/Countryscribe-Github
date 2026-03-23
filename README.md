@@ -58,10 +58,10 @@ If you wish to modify the source code or contribute to the project:
 
 ---
 
-## ⚠️ Requirements & Troubleshooting
-*   **Hardware:** Requires an NVIDIA GPU for acceptable transcription speeds.
-*   **Drivers:** Ensure the latest NVIDIA drivers are installed on the **Proxmox Host** before running the installer.
-*   **Concurrency:** The system is designed to process one meeting at a time to maximize GPU efficiency.
+## ⚠️ Requirements & Hardware Support
+*   **GPU Mode (Recommended):** Requires an NVIDIA GPU for fast, acceptable transcription speeds (taking minutes per meeting). Ensure the latest NVIDIA drivers are installed on the **Proxmox Host** before running the installer.
+*   **CPU Mode (Supported but Slow):** The application will automatically and safely fall back to CPU inference if no GPU is detected (or chosen during installation). **Warning:** Transcribing long meetings on a standard CPU can take many hours. CPU mode is only recommended for testing or extremely short clips.
+*   **Concurrency:** The system is designed to process one meeting at a time to maximize hardware efficiency.
 
 ---
 
