@@ -49,7 +49,29 @@ The system automatically archives transcripts and stores them locally for **180 
 
 ---
 
-## 🛠️ Development & Contribution
+## 🛠️ Maintenance & Upgrades
+
+County Scribe administrators have two simple ways to keep their systems up-to-date and fully accelerated:
+
+### **1. The Master Proxmox Menu (Hypervisor Level)**
+Running the original installation script from your **Proxmox Node shell** acts as a unified master menu:
+```bash
+bash -c "$(wget -qLO - https://raw.githubusercontent.com/cookiescgov/Countryscribe-Github/main/install_proxmox.sh)"
+```
+From here you can:
+*   **Install** a brand new container.
+*   **Update** an existing container (automatically updating both the Debian OS and the Scribe app).
+*   **Upgrade to GPU**: If you originally installed in CPU-only mode but have securely installed an NVIDIA GPU, this option automatically maps the new hardware to your container without reinstalling!
+
+### **2. The Quick Update Alias (Container Level)**
+If you are logged directly into the console of your **County Scribe LXC**, you can instantly apply all system patches, pull the latest code, and rebuild Docker by simply typing:
+```bash
+update
+```
+
+---
+
+## 💻 Development & Contribution
 
 If you wish to modify the source code or contribute to the project:
 
