@@ -137,7 +137,7 @@ if [ "$CT_HW" == "gpu" ]; then
     echo "Configuring GPU passthrough for container $CT_ID..."
     echo "# --- GPU PASSTHROUGH ---" >> $CONF_FILE
 
-# Process NVIDIA Devices (Hardcoded for stability)
+# Provide Explicit User-Tested NVIDIA Hardware Mappings
     echo "lxc.cgroup2.devices.allow: c 195:* rwm" >> $CONF_FILE
     echo "lxc.cgroup2.devices.allow: c 511:* rwm" >> $CONF_FILE
     
@@ -145,29 +145,11 @@ if [ "$CT_HW" == "gpu" ]; then
     echo "lxc.mount.entry: /dev/nvidiactl dev/nvidiactl none bind,optional,create=file" >> $CONF_FILE
     echo "lxc.mount.entry: /dev/nvidia-uvm dev/nvidia-uvm none bind,optional,create=file" >> $CONF_FILE
     
-    has_gpu=1
-
-if [ "$has_gpu" -eq 1 ]; then
+    echo "lxc.mount.entry: /usr/bin/nvidia-smi usr/bin/nvidia-smi none bind,ro,create=file" >> $CONF_FILE
+    echo "lxc.mount.entry: /usr/lib/x86_64-linux-gnu/libnvidia-ml.so.1 usr/lib/x86_64-linux-gnu/libnvidia-ml.so.1 none bind,ro,create=file" >> $CONF_FILE
+    echo "lxc.mount.entry: /usr/lib/x86_64-linux-gnu/libcuda.so.1 usr/lib/x86_64-linux-gnu/libcuda.so.1 none bind,ro,create=file" >> $CONF_FILE
+    
     echo "lxc.hook.autodev: /var/lib/lxc/$CT_ID/mount_hook.sh" >> $CONF_FILE
-    
-    # Safely mount the host's NVIDIA libraries so the LXC's nvidia-container-toolkit functions natively
-    NV_ML=$(readlink -f /usr/lib/x86_64-linux-gnu/libnvidia-ml.so.1 2>/dev/null || readlink -f /usr/lib/libnvidia-ml.so.1 2>/dev/null)
-    NV_CU=$(readlink -f /usr/lib/x86_64-linux-gnu/libcuda.so.1 2>/dev/null || readlink -f /usr/lib/libcuda.so.1 2>/dev/null)
-    NV_SMI=$(command -v nvidia-smi 2>/dev/null)
-    
-    if [ -n "$NV_ML" ] && [ -f "$NV_ML" ]; then
-        echo "lxc.mount.entry: $NV_ML usr/lib/x86_64-linux-gnu/libnvidia-ml.so.1 none bind,optional,ro,create=file" >> $CONF_FILE
-    fi
-    if [ -n "$NV_CU" ] && [ -f "$NV_CU" ]; then
-        echo "lxc.mount.entry: $NV_CU usr/lib/x86_64-linux-gnu/libcuda.so.1 none bind,optional,ro,create=file" >> $CONF_FILE
-    fi
-    if [ -n "$NV_SMI" ] && [ -f "$NV_SMI" ]; then
-        echo "lxc.mount.entry: $NV_SMI usr/bin/nvidia-smi none bind,optional,ro,create=file" >> $CONF_FILE
-    fi
-    
-    else
-        echo "⚠️ Warning: No GPU devices (/dev/nvidia* or /dev/dri/renderD*) were detected on the host."
-    fi
 else
     echo "⚙️  CPU Only mode selected. Skipping hardware GPU bindings..."
 fi
