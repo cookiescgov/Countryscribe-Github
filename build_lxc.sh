@@ -43,19 +43,28 @@ pveam update
 TEMPLATE=$(pveam available --section system | grep "debian-13" | head -n1 | awk '{print $2}')
 
 if [ -z "$TEMPLATE" ]; then
-    echo -e "${RED}Error: Debian 13 template not found in repositories.${NC}"
-    exit 1
+    echo -e "${YELLOW}Warning: Debian 13 template not found. Falling back to Debian 12.${NC}"
+    TEMPLATE=$(pveam available --section system | grep "debian-12" | head -n1 | awk '{print $2}')
 fi
 
 TEMPLATE_STORAGE=$(pvesm status | grep "dir" | head -n1 | awk '{print $1}')
 if [ -z "$TEMPLATE_STORAGE" ]; then TEMPLATE_STORAGE="local"; fi
 
 echo -e "Downloading $TEMPLATE to $TEMPLATE_STORAGE..."
-pveam download $TEMPLATE_STORAGE $TEMPLATE
+pveam download $TEMPLATE_STORAGE $TEMPLATE || true
 CT_TEMPLATE="$TEMPLATE_STORAGE:vztmpl/$(basename $TEMPLATE)"
 
+# Prepare Autodev Hook for Unprivileged GPU access
+mkdir -p /var/lib/lxc/$CT_ID/
+cat <<'EOF_HOOK' > /var/lib/lxc/$CT_ID/mount_hook.sh
+#!/bin/sh
+chmod 666 ${LXC_ROOTFS_MOUNT}/dev/nvidia* 2>/dev/null || true
+chmod 666 ${LXC_ROOTFS_MOUNT}/dev/dri/renderD* 2>/dev/null || true
+EOF_HOOK
+chmod +x /var/lib/lxc/$CT_ID/mount_hook.sh
+
 # --- 3. Create Container ---
-echo -e "\n${YELLOW}[Step 2/5] Creating LXC Container $CT_ID...${NC}"
+echo -e "\n${YELLOW}[Step 2/5] Creating Unprivileged LXC Container $CT_ID...${NC}"
 pct create $CT_ID "$CT_TEMPLATE" \
     --hostname $CT_HOSTNAME \
     --password $CT_PASSWORD \
@@ -64,29 +73,42 @@ pct create $CT_ID "$CT_TEMPLATE" \
     --cores 4 \
     --rootfs $CT_STORAGE:40 \
     --net0 name=eth0,bridge=vmbr0,ip=dhcp \
-    --unprivileged 0 \
-    --features nesting=1 \
+    --unprivileged 1 \
+    --features nesting=1,keyctl=1 \
     --onboot 1
 
 # --- 4. GPU Passthrough Injection ---
 echo -e "\n${YELLOW}[Step 3/5] Configuring GPU Passthrough...${NC}"
 CONF_FILE="/etc/pve/lxc/$CT_ID.conf"
+echo "# --- GPU PASSTHROUGH ---" >> $CONF_FILE
 
-# Detect Nvidia Major/Minor
-NV_CTL_MAJOR=$(ls -l /dev/nvidiactl | awk '{print $5}' | cut -d, -f1)
-NV_UVM_MAJOR=$(ls -l /dev/nvidia-uvm | awk '{print $5}' | cut -d, -f1)
+has_gpu=0
+for dev in /dev/nvidia*; do
+    if [ -e "$dev" ]; then
+        major=$(ls -l "$dev" | awk '{print $5}' | cut -d, -f1)
+        minor=$(ls -l "$dev" | awk '{print $6}')
+        echo "lxc.cgroup2.devices.allow: c $major:* rwm" >> $CONF_FILE
+        echo "lxc.mount.entry: $dev ${dev#/dev/} none bind,optional,create=file" >> $CONF_FILE
+        has_gpu=1
+    fi
+done
 
-cat <<EOF >> $CONF_FILE
-# --- GPU PASSTHROUGH ---
-lxc.cgroup2.devices.allow: c $NV_CTL_MAJOR:* rwm
-lxc.cgroup2.devices.allow: c $NV_UVM_MAJOR:* rwm
-lxc.mount.entry: /dev/nvidia0 dev/nvidia0 none bind,optional,create=file
-lxc.mount.entry: /dev/nvidiactl dev/nvidiactl none bind,optional,create=file
-lxc.mount.entry: /dev/nvidia-uvm dev/nvidia-uvm none bind,optional,create=file
-lxc.mount.entry: /dev/nvidia-uvm-tools dev/nvidia-uvm-tools none bind,optional,create=file
-EOF
+for dev in /dev/dri/renderD*; do
+    if [ -e "$dev" ]; then
+        major=$(ls -l "$dev" | awk '{print $5}' | cut -d, -f1)
+        minor=$(ls -l "$dev" | awk '{print $6}')
+        echo "lxc.cgroup2.devices.allow: c $major:* rwm" >> $CONF_FILE
+        echo "lxc.mount.entry: $dev ${dev#/dev/} none bind,optional,create=file" >> $CONF_FILE
+        has_gpu=1
+    fi
+done
 
-echo -e "${GREEN}Passthrough configured using device major IDs $NV_CTL_MAJOR and $NV_UVM_MAJOR.${NC}"
+if [ "$has_gpu" -eq 1 ]; then
+    echo "lxc.hook.autodev: /var/lib/lxc/$CT_ID/mount_hook.sh" >> $CONF_FILE
+    echo -e "${GREEN}GPU Passthrough configured automatically.${NC}"
+else
+    echo -e "${YELLOW}Warning: No GPU devices found on the host.${NC}"
+fi
 
 # --- 5. Start and Deploy ---
 echo -e "\n${YELLOW}[Step 4/5] Starting Container...${NC}"

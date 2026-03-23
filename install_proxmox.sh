@@ -54,17 +54,37 @@ CT_CORES=$(get_input "How many CPU cores may we allocate?" "4")
 CT_RAM=$(get_input "How many MiB of RAM?" "8192")
 CT_DISK=$(get_input "How many GB of disk space?" "40")
 
+# Ask for OS choice
+CT_OS=$(whiptail --title "County Scribe (郡書記)" --menu "Please select your preferred Host Operating System:" 15 70 2 \
+    "debian-13" "Debian 13 (Trixie/Stable - Recommended)" \
+    "ubuntu-24.04" "Ubuntu 24.04 LTS (Noble)" 3>&1 1>&2 2>&3)
+if [ -z "$CT_OS" ]; then CT_OS="debian-13"; fi
+
 # --- 3. Host Preparation ---
 echo "We are most humbly preparing the host environment..."
 if ! command -v git &> /dev/null; then
     apt-get update && apt-get install -y git &>/dev/null
 fi
 
+# Ensure Unprivileged LXCs can access mapped GPUs without complex UID/GID mapping
+# by automatically setting device permissions on the host via an LXC autodev hook.
+mkdir -p /var/lib/lxc/$CT_ID/
+cat <<'EOF_HOOK' > /var/lib/lxc/$CT_ID/mount_hook.sh
+#!/bin/sh
+chmod 666 ${LXC_ROOTFS_MOUNT}/dev/nvidia* 2>/dev/null || true
+chmod 666 ${LXC_ROOTFS_MOUNT}/dev/dri/renderD* 2>/dev/null || true
+EOF_HOOK
+chmod +x /var/lib/lxc/$CT_ID/mount_hook.sh
+
 # --- 4. Download Template ---
-echo "We are gracefully retrieving the Debian 13 template..."
+echo "We are gracefully retrieving the $CT_OS template..."
 pveam update &>/dev/null
-TEMPLATE=$(pveam available --section system | grep "debian-13" | head -n1 | awk '{print $2}')
-pveam download local "$TEMPLATE" &>/dev/null
+TEMPLATE=$(pveam available --section system | grep "$CT_OS" | head -n1 | awk '{print $2}')
+if [ -z "$TEMPLATE" ] && [ "$CT_OS" == "debian-13" ]; then
+    echo "⚠️ Debian 13 template not found. Falling back to Debian 12..."
+    TEMPLATE=$(pveam available --section system | grep "debian-12" | head -n1 | awk '{print $2}')
+fi
+pveam download local "$TEMPLATE" &>/dev/null || true
 
 # --- 5. Container Creation ---
 echo "We are carefully constructing the LXC container $CT_ID..."
@@ -76,39 +96,45 @@ pct create "$CT_ID" "local:vztmpl/$(basename $TEMPLATE)" \
     --cores "$CT_CORES" \
     --rootfs "$CT_STORAGE:$CT_DISK" \
     --net0 name=eth0,bridge=vmbr0,ip=dhcp \
-    --unprivileged 0 \
-    --features nesting=1 \
+    --unprivileged 1 \
+    --features nesting=1,keyctl=1 \
     --onboot 1 \
     --timezone host
 
-# --- 6. GPU Passthrough Configuration (Polite Error Handling) ---
-echo "We are humbly mapping the NVIDIA GPU pathways..."
+# --- 6. GPU Passthrough Configuration (Polite Auto-Detection) ---
+echo "We are humbly mapping the GPU pathways for container $CT_ID..."
 CONF_FILE="/etc/pve/lxc/$CT_ID.conf"
 
-# Detect IDs with fallbacks
-if [ -e /dev/nvidiactl ]; then
-    NV_CTL_MAJOR=$(ls -l /dev/nvidiactl | awk '{print $5}' | cut -d, -f1)
-else
-    echo "⚠️ We apologize, but /dev/nvidiactl was not found. Using fallback ID (195)."
-    NV_CTL_MAJOR="195"
-fi
+echo "# --- GPU PASSTHROUGH ---" >> $CONF_FILE
 
-if [ -e /dev/nvidia-uvm ]; then
-    NV_UVM_MAJOR=$(ls -l /dev/nvidia-uvm | awk '{print $5}' | cut -d, -f1)
-else
-    echo "⚠️ We apologize, but /dev/nvidia-uvm was not found. Using fallback ID (234)."
-    NV_UVM_MAJOR="234"
-fi
+# Process NVIDIA Devices
+has_gpu=0
+for dev in /dev/nvidia*; do
+    if [ -e "$dev" ]; then
+        major=$(ls -l "$dev" | awk '{print $5}' | cut -d, -f1)
+        minor=$(ls -l "$dev" | awk '{print $6}')
+        echo "lxc.cgroup2.devices.allow: c $major:* rwm" >> $CONF_FILE
+        echo "lxc.mount.entry: $dev ${dev#/dev/} none bind,optional,create=file" >> $CONF_FILE
+        has_gpu=1
+    fi
+done
 
-cat <<EOF >> $CONF_FILE
-# --- GPU PASSTHROUGH ---
-lxc.cgroup2.devices.allow: c $NV_CTL_MAJOR:* rwm
-lxc.cgroup2.devices.allow: c $NV_UVM_MAJOR:* rwm
-lxc.mount.entry: /dev/nvidia0 dev/nvidia0 none bind,optional,create=file
-lxc.mount.entry: /dev/nvidiactl dev/nvidiactl none bind,optional,create=file
-lxc.mount.entry: /dev/nvidia-uvm dev/nvidia-uvm none bind,optional,create=file
-lxc.mount.entry: /dev/nvidia-uvm-tools dev/nvidia-uvm-tools none bind,optional,create=file
-EOF
+# Process standard DRI / QuickSync / AMD Devices
+for dev in /dev/dri/renderD*; do
+    if [ -e "$dev" ]; then
+        major=$(ls -l "$dev" | awk '{print $5}' | cut -d, -f1)
+        minor=$(ls -l "$dev" | awk '{print $6}')
+        echo "lxc.cgroup2.devices.allow: c $major:* rwm" >> $CONF_FILE
+        echo "lxc.mount.entry: $dev ${dev#/dev/} none bind,optional,create=file" >> $CONF_FILE
+        has_gpu=1
+    fi
+done
+
+if [ "$has_gpu" -eq 1 ]; then
+    echo "lxc.hook.autodev: /var/lib/lxc/$CT_ID/mount_hook.sh" >> $CONF_FILE
+else
+    echo "⚠️ We apologize, but no GPU devices (/dev/nvidia* or /dev/dri/renderD*) were found on the host."
+fi
 
 # --- 7. Application Setup ---
 echo "We are awakening the container and purifying the internal setup..."

@@ -1,0 +1,31 @@
+
+
+services:
+  county-scribe:
+    container_name: county-scribe
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    image: county_scribe-county-scribe:latest
+
+    # 👇 THIS IS THE CRITICAL FIX
+    command: uvicorn backend.main:app --host 0.0.0.0 --port 8000
+
+    ports:
+      - "8000:8000"
+
+    volumes:
+      - ./uploads:/app/uploads
+      - ./archive:/app/archive
+
+    environment:
+      # Optional: Add any non-sensitive environment variables here if needed
+      - TZ=America/Chicago
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              capabilities: [gpu]
+
+    restart: unless-stopped
