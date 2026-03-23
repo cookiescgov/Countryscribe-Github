@@ -73,8 +73,7 @@ else
 fi
 
 echo "🏗️  Building Docker containers. This process may take a few moments..."
-# Use plain progress to prevent Proxmox Web Shell from spamming animated lines
-BUILDKIT_PROGRESS=plain docker compose up -d --build
+docker compose up -d --build
 
 # Inject Global Update Shortcut inside LXC
 cat <<'EOF' > /usr/local/bin/update
