@@ -1,73 +1,80 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # ==========================================================================================
-# County Scribe - Proxmox LXC Helper Script (Official Installer)
+# County Scribe - Proxmox Helper Script (Tteck-Style)
+# ==========================================================================================
+# Copyright (c) 2021-2026 tteck (Refactored for County Scribe)
+# Source: https://github.com/community-scripts/ProxmoxVE
 # ==========================================================================================
 
-set -e
+# Sourcing Proxmox Helper Functions
+source <(curl -fsSL https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main/misc/build.func)
 
-# --- 1. Dependencies Check ---
-if ! command -v git &> /dev/null; then
-    echo "Git is required. Installing..."
-    apt-get update && apt-get install -y git
-fi
+# App Configuration
+APP="County Scribe"
+var_tags="${var_tags:-transcription;nvidia;docker}"
+var_cpu="${var_cpu:-4}"
+var_ram="${var_ram:-8192}"
+var_disk="${var_disk:-40}"
+var_os="${var_os:-debian}"
+var_version="${var_version:-13}"
+var_unprivileged="${var_unprivileged:-0}" # Privileged recommended for easy GPU access
 
-# --- 2. Interactive UI (Whiptail) ---
-function msg_info() {
-    whiptail --title "County Scribe Installer" --msgbox "$1" 10 60
+header_info "$APP"
+variables
+color
+catch_errors
+
+function update_script() {
+  header_info
+  check_container_storage
+  check_container_resources
+  msg_info "Updating base system"
+  $STD apt update
+  $STD apt upgrade -y 
+  msg_ok "Base system updated"
+  msg_info "Updating County Scribe"
+  $STD bash -c "cd /opt/county-scribe && git pull && docker compose up -d --build"
+  msg_ok "Updated successfully!"
+  exit
 }
 
-function get_input() {
-    whiptail --title "County Scribe Setup" --inputbox "$1" 10 60 "$2" 3>&1 1>&2 2>&3
-}
+start
+build_container
+description
 
-function get_password() {
-    whiptail --title "County Scribe Setup" --passwordbox "$1" 10 60 3>&1 1>&2 2>&3
-}
+# --- Post-Build: GPU PASSTHROUGH (Surgical) ---
+msg_info "Configuring NVIDIA GPU Passthrough"
 
-function get_choice() {
-    local title=$1
-    local prompt=$2
-    shift 2
-    whiptail --title "$title" --menu "$prompt" 15 60 6 "$@" 3>&1 1>&2 2>&3
-}
+CT_ID=$(pvesh get /cluster/nextid -1) # The ID we just created
+CONF_FILE="/etc/pve/lxc/$CT_ID.conf"
 
-# --- 3. Welcome ---
-whiptail --title "County Scribe" --msgbox "Welcome to the County Scribe Proxmox LXC Installer.\n\nThis will create a Debian 13 LXC with Docker and NVIDIA GPU Passthrough (Stripped of Speaker ID)." 12 60
+# Detect Nvidia Major IDs
+NV_CTL_MAJOR=$(ls -l /dev/nvidiactl | awk '{print $5}' | cut -d, -f1)
+NV_UVM_MAJOR=$(ls -l /dev/nvidia-uvm | awk '{print $5}' | cut -d, -f1)
 
-# --- 4. Gather Configuration ---
-NEXT_ID=$(pvesh get /cluster/nextid)
-CT_ID=$(get_input "Enter Container ID" "$NEXT_ID")
-CT_HOSTNAME=$(get_input "Enter Hostname" "county-scribe")
-CT_PASSWORD=$(get_password "Enter Root Password for LXC")
+# Inject Passthrough Rules
+cat <<EOF >> $CONF_FILE
+# --- GPU PASSTHROUGH ---
+lxc.cgroup2.devices.allow: c $NV_CTL_MAJOR:* rwm
+lxc.cgroup2.devices.allow: c $NV_UVM_MAJOR:* rwm
+lxc.mount.entry: /dev/nvidia0 dev/nvidia0 none bind,optional,create=file
+lxc.mount.entry: /dev/nvidiactl dev/nvidiactl none bind,optional,create=file
+lxc.mount.entry: /dev/nvidia-uvm dev/nvidia-uvm none bind,optional,create=file
+lxc.mount.entry: /dev/nvidia-uvm-tools dev/nvidia-uvm-tools none bind,optional,create=file
+EOF
+msg_ok "GPU Passthrough configured"
 
-# Storage Selection
-STORAGE_LIST=$(pvesm status | grep -E "dir|lvm|zfspool" | awk '{print $1 " " $2}' | xargs)
-CT_STORAGE=$(get_choice "Storage Selection" "Select storage for the LXC container" $(echo $STORAGE_LIST))
+# --- Start Container and Run Setup ---
+msg_info "Starting Container for App Installation"
+pct start $CT_ID
+sleep 10 # Wait for network
 
-# --- 5. Confirmation ---
-if ! whiptail --title "Confirm Installation" --yesno "Ready to create LXC $CT_ID ($CT_HOSTNAME) on $CT_STORAGE?\n\nThis will download the Debian 13 template and install all dependencies." 12 60; then
-    echo "Installation cancelled."
-    exit 0
-fi
+msg_info "Running Application Setup (This will take time...)"
+pct exec $CT_ID -- bash -c "$(curl -fsSL https://raw.githubusercontent.com/cookiescgov/Countryscribe-Github/main/setup_app.sh)"
 
-# --- 6. Execution ---
-echo "Starting Installation... Please wait."
-
-# Clone/Update Repo to /tmp
-REPO_DIR="/tmp/county-scribe-install"
-if [ -d "$REPO_DIR" ]; then rm -rf "$REPO_DIR"; fi
-git clone https://github.com/cookiescgov/Countryscribe-Github "$REPO_DIR"
-
-# Run the Build Script with the gathered variables
-cd "$REPO_DIR"
-# Inject variables into environment so build_lxc.sh can use them without 'read'
-export CT_ID CT_HOSTNAME CT_PASSWORD CT_STORAGE
-chmod +x build_lxc.sh
-
-# Run the build script
-./build_lxc.sh
-
-
-# Cleanup
-rm -rf "$REPO_DIR"
+msg_ok "Completed successfully!\n"
+echo -e "${CREATING}${GN}${APP} setup has been successfully initialized!${CL}"
+echo -e "${INFO}${YW} Access the interface at the following URL:${CL}"
+IP=$(pct exec $CT_ID -- hostname -I | awk '{print $1}')
+echo -e "${TAB}${GATEWAY}${BGN}http://${IP}:8000${CL}"
