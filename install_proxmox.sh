@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 
 # ==========================================================================================
-# County Scribe - Official Proxmox Helper Script
+# County Scribe
+# Created by: Luke Cook, Starke County Government IT Department
 # ==========================================================================================
 # This script automates the deployment of County Scribe on Proxmox VE.
 # ==========================================================================================
