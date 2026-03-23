@@ -1,7 +1,11 @@
 # 🏛️ County Scribe
 **Secure, Local Audio Transcription for Local Government.**
 
-County Scribe is an open-source tool designed to provide local governments with a secure, self-hosted solution for transcribing public meetings. By running locally on your own hardware, it ensures that sensitive data never leaves your infrastructure while providing high-accuracy transcripts for official records.
+> [!WARNING]
+> **Work in Progress:** This project is currently under active development. Please wait until development is finalized before attempting deployment in a production environment.
+
+County Scribe is an open-source tool designed to provide local governments with a secure, self-hosted solution for transcribing public meetings.
+ By running locally on your own hardware, it ensures that sensitive data never leaves your infrastructure while providing high-accuracy transcripts for official records.
 
 ---
 
