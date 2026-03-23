@@ -6,15 +6,6 @@
 
 ---
 
-## Proxmox Helper Command (Quick Install)
-
-To instantly deploy County Scribe in an LXC container with GPU support on your Proxmox host, run the following command in your Proxmox node shell:
-
-```bash
-bash -c "$(wget -qO - https://raw.githubusercontent.com/cookiescgov/Countryscribe-Github/main/install_proxmox.sh)"
-```
-
----
 
 > [!WARNING]
 > **Work in Progress:** This project is currently under active development. Please wait until development is finalized before attempting deployment in a production environment.
