@@ -291,52 +291,35 @@ async def transcribe_audio(
                     {"start": 5.0, "end": 10.0, "text": "Real GPU inference is disabled.", "speaker": "SPEAKER_02"}
                 ]
             else:
-                # --- WhisperX Pipeline ---
-                import whisperx
+                # --- Faster-Whisper Pipeline (Pyannote-Free) ---
+                from faster_whisper import WhisperModel
                 
                 device = "cuda" if torch.cuda.is_available() else "cpu"
-                print(f"Loading WhisperX model {model_size} on {device}...")
+                print(f"Loading faster-whisper model {model_size} on {device}...")
                 
-                # 1. Transcribe
                 # P1000/Pascal GPUs often fail with float16. Use int8 for best compatibility.
                 compute_type = "int8" 
-                batch_size = 16
                 
-                model = whisperx.load_model(model_size, device, compute_type=compute_type)
-                audio = whisperx.load_audio(temp_audio_path)
-                result = model.transcribe(audio, batch_size=batch_size)
+                model = WhisperModel(model_size, device=device, compute_type=compute_type)
                 
-                # Cleanup model to free VRAM
-                model_lang = result["language"]
+                print("Transcribing audio...")
+                # Transcribe the audio file directly
+                segments, info = model.transcribe(temp_audio_path, beam_size=5)
+                
+                result_segments = []
+                for segment in segments:
+                    result_segments.append({
+                        "start": segment.start,
+                        "end": segment.end,
+                        "text": segment.text,
+                        "speaker": "Unknown"
+                    })
+                
+                # Cleanup model to free RAM/VRAM
                 del model
                 gc.collect()
                 if device == "cuda":
                     torch.cuda.empty_cache()
-
-                # 2. Align
-                print("Aligning...")
-                model_a, metadata = whisperx.load_align_model(language_code=model_lang, device=device)
-                result = whisperx.align(result["segments"], model_a, metadata, audio, device, return_char_alignments=False)
-                
-                del model_a
-                gc.collect()
-                if device == "cuda":
-                    torch.cuda.empty_cache()
-
-                # 3. Diarize
-                if HF_TOKEN and diarize:
-                    print("Diarizing...")
-                    # Fix for missing attribute: Import directly from the submodule
-                    from whisperx.diarize import DiarizationPipeline
-                    diarize_model = DiarizationPipeline(use_auth_token=HF_TOKEN, device=device)
-                    diarize_segments = diarize_model(audio)
-                    result = whisperx.assign_word_speakers(diarize_segments, result)
-                elif not diarize:
-                    print("Skipping diarization (User requested skip).")
-                else:
-                    print("Skipping diarization (HF_TOKEN not set).")
-                
-                result_segments = result["segments"]
 
             # Process segments into our API format
             formatted_result = []

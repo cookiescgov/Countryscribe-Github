@@ -62,10 +62,6 @@ RUN pip install --no-cache-dir \
 # ---- PyAV ----
 RUN pip install --no-cache-dir "av>=11.0.0"
 
-# ---- WhisperX ----
-RUN pip install --no-cache-dir --no-deps \
-    git+https://github.com/m-bain/whisperx.git
-
 # ---- Copy backend code ----
 COPY backend ./backend
 
