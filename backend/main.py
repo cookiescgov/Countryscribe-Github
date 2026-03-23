@@ -8,13 +8,11 @@ from datetime import datetime, timedelta
 from typing import List, Optional
 from io import BytesIO
 
-from fastapi import FastAPI, UploadFile, File, Response, Form, HTTPException, Depends
+from fastapi import FastAPI, UploadFile, File, Response, Form, HTTPException, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel
-from jose import JWTError, jwt
 
 from reportlab.lib.pagesizes import letter
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
@@ -28,16 +26,8 @@ import yt_dlp
 # ─────────────────────────────────────────────
 # Configuration
 # ─────────────────────────────────────────────
-HF_TOKEN = os.getenv("HF_TOKEN")  # (not used currently since diarization is removed)
 ARCHIVE_ROOT = "archive"
 os.makedirs(ARCHIVE_ROOT, exist_ok=True)
-
-# SECURITY SETTINGS (keep as-is, but you SHOULD change this)
-SECRET_KEY = "county-scribe-secret-key-change-this"
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 90  # Auto-logout after 90 minutes
-
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/token")
 
 # GLOBAL LOCK: prevent concurrent meetings
 processing_lock = asyncio.Lock()
@@ -68,7 +58,7 @@ class TranscriptionSegment(BaseModel):
 
 
 # ─────────────────────────────────────────────
-# User DB (simple JSON file)
+# Department DB (simple JSON file)
 # ─────────────────────────────────────────────
 USER_DB_FILE = os.path.join(ARCHIVE_ROOT, "users_db.json")
 
@@ -76,7 +66,7 @@ USER_DB_FILE = os.path.join(ARCHIVE_ROOT, "users_db.json")
 def load_users():
     if not os.path.exists(USER_DB_FILE):
         defaults = {
-            "Planning Commission/BZA": {"username": "Planning Commission/BZA"},
+            "Planning Commission": {"username": "Planning Commission"},
             "Council/Commissioners": {"username": "Council/Commissioners"},
             "Drainage Board": {"username": "Drainage Board"},
             "Park Board": {"username": "Park Board"},
@@ -99,13 +89,14 @@ def load_users():
 
 def save_user_to_db(username: str):
     users = load_users()
-    users[username] = {"username": username}
-    with open(USER_DB_FILE, "w", encoding="utf-8") as f:
-        json.dump(users, f, indent=2)
-    try:
-        os.chmod(USER_DB_FILE, 0o666)
-    except Exception:
-        pass
+    if username not in users:
+        users[username] = {"username": username}
+        with open(USER_DB_FILE, "w", encoding="utf-8") as f:
+            json.dump(users, f, indent=2)
+        try:
+            os.chmod(USER_DB_FILE, 0o666)
+        except Exception:
+            pass
 
 
 def get_user(username: str):
@@ -116,32 +107,14 @@ def get_user(username: str):
 
 
 # ─────────────────────────────────────────────
-# Auth helpers
+# Identity helpers (Auth-Free Department Tagging)
 # ─────────────────────────────────────────────
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
+async def get_current_user(x_department: str = Header(default="Unknown_Department")) -> User:
     """
-    Creates a JWT token with a 90-minute expiration.
+    Reads the X-Department header provided by the frontend UI to organize files.
+    No authentication/JWT required.
     """
-    to_encode = data.copy()
-    expire = datetime.utcnow() + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
-    to_encode.update({"exp": expire})
-    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-
-
-async def get_current_user(token: str = Depends(oauth2_scheme)) -> User:
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        username: str = payload.get("sub")
-        if not username:
-            raise HTTPException(status_code=401, detail="Invalid credentials")
-    except JWTError:
-        raise HTTPException(status_code=401, detail="Invalid credentials")
-    return User(username=username)
-
-
-@app.get("/api/me", response_model=User)
-async def read_users_me(current_user: User = Depends(get_current_user)):
-    return current_user
+    return User(username=x_department)
 
 
 # ─────────────────────────────────────────────
