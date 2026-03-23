@@ -43,9 +43,8 @@ The system automatically archives transcripts and stores them locally for **180 
 
 If you wish to modify the source code or contribute to the project:
 
-1.  **Fork/Clone:** Clone the repository to your local workstation.
-2.  **Management:** Use **GitHub Desktop** or the CLI to manage your changes.
-3.  **Pushing Updates:** Pushing changes to your fork allows you to redeploy the updated version using the installer script.
+1.  **Fork/Clone:** Fork the repository on GitHub and clone it to your local environment.
+2.  **Pull Requests:** Submit a Pull Request with your improvements or bug fixes.
 
 ---
 
