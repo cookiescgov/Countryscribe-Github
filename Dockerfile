@@ -47,6 +47,9 @@ RUN pip install --no-cache-dir \
     pydantic \
     reportlab \
     python-docx \
+    "python-jose[cryptography]" \
+    "passlib[bcrypt]" \
+    bcrypt \
     pandas \
     "transformers==4.35.2" \
     huggingface-hub \

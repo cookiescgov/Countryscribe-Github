@@ -1,17 +1,20 @@
 import os
 import asyncio
 import json
-import time
 import glob
+import re
+import gc
 from datetime import datetime, timedelta
 from typing import List, Optional
 from io import BytesIO
 
-from fastapi import FastAPI, UploadFile, File, Response, Form, HTTPException
+from fastapi import FastAPI, UploadFile, File, Response, Form, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel
+from jose import JWTError, jwt
 
 from reportlab.lib.pagesizes import letter
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
@@ -19,182 +22,452 @@ from reportlab.lib.styles import getSampleStyleSheet
 from docx import Document
 
 import torch
-import gc
 import yt_dlp
-import re
 
-# --- Configuration ---
-# MOCK_MODE: Set to True for testing without GPU/Models
-MOCK_MODE = os.getenv("MOCK_MODE", "False").lower() == "true"
-HF_TOKEN = os.getenv("HF_TOKEN") # Required for Diarization
-ARCHIVE_DIR = "archive"
-os.makedirs(ARCHIVE_DIR, exist_ok=True)
 
-# Global lock to prevent concurrent GPU processing
+# ─────────────────────────────────────────────
+# Configuration
+# ─────────────────────────────────────────────
+HF_TOKEN = os.getenv("HF_TOKEN")  # (not used currently since diarization is removed)
+ARCHIVE_ROOT = "archive"
+os.makedirs(ARCHIVE_ROOT, exist_ok=True)
+
+# SECURITY SETTINGS (keep as-is, but you SHOULD change this)
+SECRET_KEY = "county-scribe-secret-key-change-this"
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 90  # Auto-logout after 90 minutes
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/token")
+
+# GLOBAL LOCK: prevent concurrent meetings
 processing_lock = asyncio.Lock()
 
-# --- FastAPI App Initialization ---
 app = FastAPI()
 
-# --- CORS Configuration ---
-origins = ["*"]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+
+# ─────────────────────────────────────────────
+# Models
+# ─────────────────────────────────────────────
+class User(BaseModel):
+    username: str
+
+
 class TranscriptionSegment(BaseModel):
     start: str
     end: str
     text: str
-    speaker: str = "Unknown"
+    speaker: str = "Speaker"
 
-# --- Helper Function ---
+
+# ─────────────────────────────────────────────
+# User DB (simple JSON file)
+# ─────────────────────────────────────────────
+USER_DB_FILE = os.path.join(ARCHIVE_ROOT, "users_db.json")
+
+
+def load_users():
+    if not os.path.exists(USER_DB_FILE):
+        defaults = {
+            "Planning Commission/BZA": {"username": "Planning Commission/BZA"},
+            "Council/Commissioners": {"username": "Council/Commissioners"},
+            "Drainage Board": {"username": "Drainage Board"},
+            "Park Board": {"username": "Park Board"},
+            "Health Board": {"username": "Health Board"},
+        }
+        try:
+            with open(USER_DB_FILE, "w", encoding="utf-8") as f:
+                json.dump(defaults, f, indent=2)
+            os.chmod(USER_DB_FILE, 0o666)
+        except Exception:
+            pass
+        return defaults
+
+    try:
+        with open(USER_DB_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def save_user_to_db(username: str):
+    users = load_users()
+    users[username] = {"username": username}
+    with open(USER_DB_FILE, "w", encoding="utf-8") as f:
+        json.dump(users, f, indent=2)
+    try:
+        os.chmod(USER_DB_FILE, 0o666)
+    except Exception:
+        pass
+
+
+def get_user(username: str):
+    users = load_users()
+    if username in users:
+        return User(**users[username])
+    return None
+
+
+# ─────────────────────────────────────────────
+# Auth helpers
+# ─────────────────────────────────────────────
+def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
+    """
+    Creates a JWT token with a 90-minute expiration.
+    """
+    to_encode = data.copy()
+    expire = datetime.utcnow() + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
+    to_encode.update({"exp": expire})
+    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
+
+async def get_current_user(token: str = Depends(oauth2_scheme)) -> User:
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username: str = payload.get("sub")
+        if not username:
+            raise HTTPException(status_code=401, detail="Invalid credentials")
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    return User(username=username)
+
+
+@app.get("/api/me", response_model=User)
+async def read_users_me(current_user: User = Depends(get_current_user)):
+    return current_user
+
+
+# ─────────────────────────────────────────────
+# Archive helpers
+# ─────────────────────────────────────────────
+def get_user_archive_dir(username: str) -> str:
+    # "Council/Commissioners" -> "Council_Commissioners"
+    safe_name = re.sub(r"[^a-zA-Z0-9]", "_", username)
+    user_dir = os.path.join(ARCHIVE_ROOT, safe_name)
+    if not os.path.exists(user_dir):
+        os.makedirs(user_dir, exist_ok=True)
+        try:
+            os.chmod(user_dir, 0o777)
+        except Exception:
+            pass
+    return user_dir
+
+
 def format_timestamp(seconds: float) -> str:
-    """Converts a float timestamp in seconds to a formatted string HH:MM:SS.ms"""
     if seconds is None:
         return "00:00:00.000"
     td = timedelta(seconds=seconds)
-    total_seconds = int(td.total_seconds())
-    hours, remainder = divmod(total_seconds, 3600)
-    minutes, seconds = divmod(remainder, 60)
-    milliseconds = td.microseconds // 1000
-    return f"{hours:02}:{minutes:02}:{seconds:02}.{milliseconds:03}"
+    hours, remainder = divmod(int(td.total_seconds()), 3600)
+    minutes, sec = divmod(remainder, 60)
+    return f"{hours:02}:{minutes:02}:{sec:02}.{td.microseconds // 1000:03}"
 
-# --- API Endpoints ---
+
+# ─────────────────────────────────────────────
+# Health
+# ─────────────────────────────────────────────
 @app.get("/api/health")
-def read_root():
+def health():
     return {"message": "County Scribe API is running."}
 
-# --- ARCHIVE ENDPOINTS ---
 
-def cleanup_old_archives(days: int = 180):
-    """Internal function to delete files older than X days."""
-    try:
-        cutoff = time.time() - (days * 86400)
-        files = glob.glob(os.path.join(ARCHIVE_DIR, "*.json"))
-        for f in files:
-            if os.stat(f).st_mtime < cutoff:
-                os.remove(f)
-                print(f"Auto-Pruned expired archive: {f}")
-    except Exception as e:
-        print(f"Error during auto-prune: {e}")
-
-@app.on_event("startup")
-async def startup_event():
-    """Run cleanup on server launch."""
-    cleanup_old_archives()
-
+# ─────────────────────────────────────────────
+# Archive endpoints (per-user)
+# ─────────────────────────────────────────────
 @app.get("/api/archives")
-def list_archives():
-    """List all archived transcripts sorted by date (newest first). Auto-prunes old files."""
-    # Ensure we are compliant before listing
-    cleanup_old_archives()
-    
-    files = glob.glob(os.path.join(ARCHIVE_DIR, "*.json"))
+def list_archives(current_user: User = Depends(get_current_user)):
+    user_dir = get_user_archive_dir(current_user.username)
+    files = glob.glob(os.path.join(user_dir, "*.json"))
+
     archives = []
-    for f in files:
-        stats = os.stat(f)
-        filename = os.path.basename(f)
-        
-        # Extract Meeting Date from filename prefix (YYYY-MM-DD)
+    for fpath in files:
+        stats = os.stat(fpath)
+        filename = os.path.basename(fpath)
+
         meeting_date = "Unknown"
         match = re.match(r"(\d{4}-\d{2}-\d{2})", filename)
         if match:
             meeting_date = match.group(1)
 
-        archives.append({
-            "filename": filename,
-            "created": datetime.fromtimestamp(stats.st_mtime).strftime("%Y-%m-%d %H:%M:%S"),
-            "meeting_date": meeting_date,
-            "size_kb": round(stats.st_size / 1024, 2)
-        })
-    # Sort by filename (which includes timestamp/date) descending
-    return sorted(archives, key=lambda x: x['filename'], reverse=True)
+        archives.append(
+            {
+                "filename": filename,
+                "created": datetime.fromtimestamp(stats.st_mtime).strftime("%Y-%m-%d %H:%M:%S"),
+                "meeting_date": meeting_date,
+                "size_kb": round(stats.st_size / 1024, 2),
+            }
+        )
+
+    return sorted(archives, key=lambda x: x["filename"], reverse=True)
+
 
 @app.get("/api/archives/{filename}")
-def get_archive(filename: str):
-    """Retrieve a specific archived transcript."""
-    safe_path = os.path.join(ARCHIVE_DIR, os.path.basename(filename))
+def get_archive(filename: str, current_user: User = Depends(get_current_user)):
+    user_dir = get_user_archive_dir(current_user.username)
+    safe_path = os.path.join(user_dir, os.path.basename(filename))
+
     if not os.path.exists(safe_path):
         raise HTTPException(status_code=404, detail="Archive not found")
+
     with open(safe_path, "r", encoding="utf-8") as f:
         return json.load(f)
 
+
 @app.delete("/api/archives/{filename}")
-def delete_archive(filename: str):
-    """Delete a specific archive file."""
-    safe_path = os.path.join(ARCHIVE_DIR, os.path.basename(filename))
+def delete_archive(filename: str, current_user: User = Depends(get_current_user)):
+    user_dir = get_user_archive_dir(current_user.username)
+    safe_path = os.path.join(user_dir, os.path.basename(filename))
+
     if os.path.exists(safe_path):
         os.remove(safe_path)
         return {"status": "deleted"}
+
     raise HTTPException(status_code=404, detail="File not found")
 
+
 @app.post("/api/archives/prune")
-def prune_archives(days: int = 180):
-    """Delete files older than 'days'."""
-    cutoff = time.time() - (days * 86400)
+def prune_archives(days: int = 180, current_user: User = Depends(get_current_user)):
+    """
+    Deletes files older than 'days' in THIS user's archive directory.
+    """
+    cutoff = (datetime.now() - timedelta(days=days)).timestamp()
+    user_dir = get_user_archive_dir(current_user.username)
+
     deleted_count = 0
-    files = glob.glob(os.path.join(ARCHIVE_DIR, "*.json"))
-    
-    for f in files:
-        if os.stat(f).st_mtime < cutoff:
-            os.remove(f)
+    files = glob.glob(os.path.join(user_dir, "*.json"))
+    for fpath in files:
+        if os.stat(fpath).st_mtime < cutoff:
+            os.remove(fpath)
             deleted_count += 1
-            
+
     return {"status": "success", "deleted": deleted_count, "retention_days": days}
 
-# --- EXPORT ENDPOINTS ---
 
+# ─────────────────────────────────────────────
+# Users endpoints
+# ─────────────────────────────────────────────
+@app.get("/api/users")
+def get_all_users():
+    return list(load_users().keys())
+
+
+@app.post("/api/register")
+async def register(username: str = Form(...)):
+    if get_user(username):
+        raise HTTPException(status_code=400, detail="User already exists")
+    save_user_to_db(username)
+    access_token = create_access_token(data={"sub": username})
+    return {"access_token": access_token, "token_type": "bearer", "username": username}
+
+
+@app.post("/api/token")
+async def login_for_access_token(username: str = Form(...)):
+    # NOTE: no password in current design
+    access_token = create_access_token(data={"sub": username})
+    return {"access_token": access_token, "token_type": "bearer", "username": username}
+
+
+# ─────────────────────────────────────────────
+# YouTube download helper
+# ─────────────────────────────────────────────
+def download_youtube_audio(url: str) -> tuple[str, str]:
+    timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+    output_template = f"temp_yt_{timestamp}"
+
+    ydl_opts = {
+        "format": "bestaudio/best",
+        "outtmpl": output_template,
+        "postprocessors": [{"key": "FFmpegExtractAudio", "preferredcodec": "m4a"}],
+        "quiet": True,
+        "no_warnings": True,
+        "source_address": "0.0.0.0",
+        "socket_timeout": 60,
+        "retries": 20,
+        "fragment_retries": 20,
+        "concurrent_fragment_downloads": 4,
+    }
+
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        info = ydl.extract_info(url, download=False)
+        title = info.get("title", "YouTube_Video")
+        ydl.download([url])
+        final_filename = f"{output_template}.m4a"
+        return final_filename, title
+
+
+# ─────────────────────────────────────────────
+# Transcribe endpoint (FIXED + STABLE)
+# ─────────────────────────────────────────────
+@app.post("/api/transcribe")
+async def transcribe_audio(
+    file: UploadFile = File(None),
+    youtube_url: str = Form(None),
+    model_size: str = Form("large-v3"),
+    diarize: bool = Form(False),  # ignored (kept for frontend compatibility)
+    meeting_date: str = Form(None),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Accepts an uploaded file OR a YouTube URL.
+    Diarization is intentionally omitted for stability (per your request).
+    """
+    if processing_lock.locked():
+        raise HTTPException(
+            status_code=503,
+            detail="System Busy: Another meeting is being processed. Please try again later.",
+        )
+
+    async with processing_lock:
+        if not file and not youtube_url:
+            raise HTTPException(status_code=400, detail="Please provide either a file or a YouTube URL.")
+
+        temp_audio_path = None
+        original_filename = "Unknown"
+
+        try:
+            # 1) Prepare audio source
+            if youtube_url:
+                print(f"Downloading YouTube URL: {youtube_url}")
+                temp_audio_path, video_title = download_youtube_audio(youtube_url)
+
+                safe_title = "".join([c for c in video_title if c.isalnum() or c in (" ", ".", "_")]).replace(" ", "_")
+                original_filename = f"{safe_title}.m4a"
+            else:
+                original_filename = file.filename or "uploaded_audio"
+                temp_audio_path = f"temp_{original_filename}"
+                with open(temp_audio_path, "wb") as f:
+                    f.write(await file.read())
+
+            # 2) Faster-Whisper Pipeline (Pyannote-Free)
+            from faster_whisper import WhisperModel
+
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+
+            # Clean CUDA state before loading model
+            if device == "cuda":
+                torch.cuda.empty_cache()
+                torch.cuda.synchronize()
+
+            # A2000 + large-v3 is stable with float16; int8 can cause CUDA init issues
+            if model_size == "large-v3" and device == "cuda":
+                compute_type = "float16"
+            else:
+                compute_type = "int8"
+
+            print(f"Received request. Model: {model_size}, Diarize (ignored): {diarize}, Date: {meeting_date}")
+            print(f"Loading faster-whisper model {model_size} on {device} ({compute_type})...")
+
+            model = WhisperModel(model_size, device=device, compute_type=compute_type)
+
+            print("Transcribing...")
+            segments, info = model.transcribe(temp_audio_path, beam_size=5)
+
+            result_segments = []
+            for segment in segments:
+                result_segments.append({
+                    "start": segment.start,
+                    "end": segment.end,
+                    "text": segment.text,
+                    "speaker": "Speaker"
+                })
+
+            # Free VRAM ASAP
+            del model
+            gc.collect()
+            if device == "cuda":
+                torch.cuda.empty_cache()
+                torch.cuda.synchronize()
+
+            # 3) Format output (no diarization → generic speaker label)
+            formatted_result = []
+            for seg in result_segments:
+                formatted_result.append(
+                    {
+                        "start": format_timestamp(seg.get("start", 0)),
+                        "end": format_timestamp(seg.get("end", 0)),
+                        "text": (seg.get("text", "") or "").strip(),
+                        "speaker": "Speaker",
+                    }
+                )
+
+            # 4) Archive per user
+            try:
+                date_prefix = meeting_date if meeting_date else datetime.now().strftime("%Y-%m-%d")
+                time_suffix = datetime.now().strftime("%H-%M-%S")
+                safe_filename = "".join([c for c in original_filename if c.isalnum() or c in (" ", ".", "_")]).replace(" ", "_")
+
+                user_dir = get_user_archive_dir(current_user.username)
+                archive_path = os.path.join(user_dir, f"{date_prefix}_{time_suffix}_{safe_filename}.json")
+
+                with open(archive_path, "w", encoding="utf-8") as f:
+                    json.dump(formatted_result, f, indent=2, ensure_ascii=False)
+
+                print(f"Archived to: {archive_path}")
+            except Exception as e:
+                print(f"Archive failed: {e}")
+
+            return {"transcription": formatted_result}
+
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            raise HTTPException(status_code=500, detail=str(e))
+
+        finally:
+            # Clean up temp audio file
+            if temp_audio_path and os.path.exists(temp_audio_path):
+                try:
+                    os.remove(temp_audio_path)
+                except Exception:
+                    pass
+
+
+# ─────────────────────────────────────────────
+# Export endpoints
+# ─────────────────────────────────────────────
 @app.post("/api/download-pdf")
 async def download_pdf(transcription_data: List[TranscriptionSegment], clean: bool = False):
     buffer = BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=letter)
     styles = getSampleStyleSheet()
-    story = []
-
-    title = "Meeting Minutes Draft" if clean else "Audio Transcription"
-    story.append(Paragraph(title, styles['h1']))
-    story.append(Spacer(1, 0.2 * 100))
+    story = [Paragraph("Meeting Minutes" if clean else "Transcription", styles["h1"]), Spacer(1, 20)]
 
     if clean:
-        # Paragraph Mode
         current_block = []
         for i, segment in enumerate(transcription_data):
             current_block.append(segment.text.strip())
-            # Create a new paragraph every 5 segments
             if (i + 1) % 5 == 0:
-                text = " ".join(current_block)
-                story.append(Paragraph(text, styles['Normal']))
-                story.append(Spacer(1, 0.1 * 100))
+                story.append(Paragraph(" ".join(current_block), styles["Normal"]))
+                story.append(Spacer(1, 10))
                 current_block = []
-        # Flush remaining
         if current_block:
-            story.append(Paragraph(" ".join(current_block), styles['Normal']))
+            story.append(Paragraph(" ".join(current_block), styles["Normal"]))
     else:
-        # Timestamp Mode
         for segment in transcription_data:
-            text = f"<b>[{segment.start} - {segment.end}] {segment.speaker}:</b> {segment.text}"
-            story.append(Paragraph(text, styles['Normal']))
-            story.append(Spacer(1, 0.1 * 100))
+            story.append(Paragraph(f"<b>[{segment.start}] {segment.speaker}:</b> {segment.text}", styles["Normal"]))
+            story.append(Spacer(1, 10))
 
     doc.build(story)
     buffer.seek(0)
-
-    return Response(content=buffer.getvalue(), media_type="application/pdf", headers={"Content-Disposition": "attachment; filename=\"transcription.pdf\""})
+    return Response(
+        content=buffer.getvalue(),
+        media_type="application/pdf",
+        headers={"Content-Disposition": 'attachment; filename="minutes.pdf"'},
+    )
 
 
 @app.post("/api/download-docx")
 async def download_docx(transcription_data: List[TranscriptionSegment], clean: bool = False):
     document = Document()
-    title = "Meeting Minutes Draft" if clean else "Audio Transcription"
-    document.add_heading(title, level=1)
+    document.add_heading("Meeting Minutes" if clean else "Transcription", 1)
 
     if clean:
-        # Paragraph Mode
         current_block = []
         for i, segment in enumerate(transcription_data):
             current_block.append(segment.text.strip())
@@ -204,167 +477,25 @@ async def download_docx(transcription_data: List[TranscriptionSegment], clean: b
         if current_block:
             document.add_paragraph(" ".join(current_block))
     else:
-        # Timestamp Mode
         for segment in transcription_data:
-            document.add_paragraph(f"[{segment.start} - {segment.end}] {segment.speaker}: {segment.text}")
+            document.add_paragraph(f"[{segment.start}] {segment.speaker}: {segment.text}")
 
     buffer = BytesIO()
     document.save(buffer)
     buffer.seek(0)
+    return Response(
+        content=buffer.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={"Content-Disposition": 'attachment; filename="minutes.docx"'},
+    )
 
-    return Response(content=buffer.getvalue(), media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document", headers={"Content-Disposition": "attachment; filename=\"transcription.docx\""})
 
-def download_youtube_audio(url: str) -> str:
-    """Downloads audio from a YouTube URL and returns the local filename."""
-    timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-    # Template will initially match the source, FFmpeg will convert
-    output_template = f"temp_yt_{timestamp}"
-    
-    ydl_opts = {
-        'format': 'bestaudio/best',
-        'outtmpl': output_template, # yt-dlp appends ext automatically
-        'postprocessors': [{
-            'key': 'FFmpegExtractAudio',
-            'preferredcodec': 'm4a',
-        }],
-        'quiet': True,
-        'no_warnings': True,
-        'source_address': '0.0.0.0', # Force IPv4 to fix Docker network issues
-    }
-    
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        # Extract info first to get title
-        info = ydl.extract_info(url, download=False)
-        title = info.get('title', 'YouTube_Video')
-        
-        # Download
-        ydl.download([url])
-        
-        # We know it becomes .m4a
-        final_filename = f"{output_template}.m4a"
-        return final_filename, title
-
-@app.post("/api/transcribe")
-async def transcribe_audio(
-    file: UploadFile = File(None), 
-    youtube_url: str = Form(None),
-    model_size: str = Form("large-v2"),
-    diarize: bool = Form(True),
-    meeting_date: str = Form(None)
-):
-    """
-    Accepts an audio file OR a YouTube URL, transcribes it using WhisperX.
-    """
-    if processing_lock.locked():
-        raise HTTPException(
-            status_code=503, 
-            detail="System Busy: Another meeting is being processed. Please try again in ~20 minutes."
-        )
-
-    async with processing_lock:
-        if not file and not youtube_url:
-            raise HTTPException(status_code=400, detail="Please provide either a file or a YouTube URL.")
-
-        print(f"Received request. Model: {model_size}, Diarize: {diarize}, Date: {meeting_date}")
-        
-        temp_audio_path = None
-        original_filename = "Unknown"
-
-        try:
-            # 1. Prepare Audio Source
-            if youtube_url:
-                print(f"Downloading YouTube URL: {youtube_url}")
-                temp_audio_path, video_title = download_youtube_audio(youtube_url)
-                # Sanitize title for filename
-                safe_title = "".join([c for c in video_title if c.isalnum() or c in (' ', '.', '_')]).replace(" ", "_")
-                original_filename = f"{safe_title}.m4a"
-            else:
-                original_filename = file.filename
-                temp_audio_path = f"temp_{file.filename}"
-                with open(temp_audio_path, "wb") as buffer:
-                    buffer.write(await file.read())
-
-            if MOCK_MODE:
-                await asyncio.sleep(2)
-                result_segments = [
-                    {"start": 0.0, "end": 5.0, "text": "This is a mock transcription.", "speaker": "SPEAKER_01"},
-                    {"start": 5.0, "end": 10.0, "text": "Real GPU inference is disabled.", "speaker": "SPEAKER_02"}
-                ]
-            else:
-                # --- Faster-Whisper Pipeline (Pyannote-Free) ---
-                from faster_whisper import WhisperModel
-                
-                device = "cuda" if torch.cuda.is_available() else "cpu"
-                print(f"Loading faster-whisper model {model_size} on {device}...")
-                
-                # P1000/Pascal GPUs often fail with float16. Use int8 for best compatibility.
-                compute_type = "int8" 
-                
-                model = WhisperModel(model_size, device=device, compute_type=compute_type)
-                
-                print("Transcribing audio...")
-                # Transcribe the audio file directly
-                segments, info = model.transcribe(temp_audio_path, beam_size=5)
-                
-                result_segments = []
-                for segment in segments:
-                    result_segments.append({
-                        "start": segment.start,
-                        "end": segment.end,
-                        "text": segment.text,
-                        "speaker": "Unknown"
-                    })
-                
-                # Cleanup model to free RAM/VRAM
-                del model
-                gc.collect()
-                if device == "cuda":
-                    torch.cuda.empty_cache()
-
-            # Process segments into our API format
-            formatted_result = []
-            for segment in result_segments:
-                formatted_result.append({
-                    "start": format_timestamp(segment.get("start", 0)),
-                    "end": format_timestamp(segment.get("end", 0)),
-                    "text": segment.get("text", "").strip(),
-                    "speaker": segment.get("speaker", "Unknown")
-                })
-
-            # --- AUTO-ARCHIVE ---
-            try:
-                # Use User Date if provided, else Today
-                date_prefix = meeting_date if meeting_date else datetime.now().strftime("%Y-%m-%d")
-                # Append time for uniqueness
-                time_suffix = datetime.now().strftime("%H-%M-%S")
-                
-                safe_filename = "".join([c for c in original_filename if c.isalnum() or c in (' ', '.', '_')]).replace(" ", "_")
-                archive_path = os.path.join(ARCHIVE_DIR, f"{date_prefix}_{time_suffix}_{safe_filename}.json")
-                
-                with open(archive_path, "w", encoding="utf-8") as f:
-                    json.dump(formatted_result, f, indent=2, ensure_ascii=False)
-                print(f"Archived to: {archive_path}")
-            except Exception as e:
-                print(f"Archive failed: {e}")
-            # --------------------
-
-            return {"transcription": formatted_result}
-
-        except Exception as e:
-            import traceback
-            traceback.print_exc()
-            raise HTTPException(status_code=500, detail=str(e))
-        
-        finally:
-            # Clean up the temporary file
-            if temp_audio_path and os.path.exists(temp_audio_path):
-                os.remove(temp_audio_path)
-# --- STATIC FILES FOR REACT ---
-# Must be last to avoid overriding API routes
+# ─────────────────────────────────────────────
+# Static frontend hosting (React build)
+# ─────────────────────────────────────────────
 if os.path.exists("static"):
     app.mount("/static", StaticFiles(directory="static/static"), name="static")
-    
-    # Catch-all to serve index.html for React Router
+
     @app.get("/{full_path:path}")
     async def serve_react(full_path: str):
         if full_path.startswith("api"):
@@ -373,6 +504,11 @@ if os.path.exists("static"):
 else:
     print("Warning: 'static' directory not found. Frontend will not be served.")
 
+
+# ─────────────────────────────────────────────
+# Entrypoint
+# ─────────────────────────────────────────────
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=8000)
