@@ -107,11 +107,12 @@ pct create "$CT_ID" "local:vztmpl/$(basename $TEMPLATE)" \
     --onboot 1 \
     --timezone host
 
-# --- 6. GPU Passthrough Configuration (Auto-Detection) ---
-echo "Configuring GPU passthrough for container $CT_ID..."
+# --- 6. Hardware Passthrough Configuration ---
 CONF_FILE="/etc/pve/lxc/$CT_ID.conf"
 
-echo "# --- GPU PASSTHROUGH ---" >> $CONF_FILE
+if [ "$CT_HW" == "gpu" ]; then
+    echo "Configuring GPU passthrough for container $CT_ID..."
+    echo "# --- GPU PASSTHROUGH ---" >> $CONF_FILE
 
 # Process NVIDIA Devices
 has_gpu=0
@@ -154,8 +155,11 @@ if [ "$has_gpu" -eq 1 ]; then
         echo "lxc.mount.entry: $NV_SMI usr/bin/nvidia-smi none bind,optional,ro,create=file" >> $CONF_FILE
     fi
     
+    else
+        echo "⚠️ Warning: No GPU devices (/dev/nvidia* or /dev/dri/renderD*) were detected on the host."
+    fi
 else
-    echo "⚠️ Warning: No GPU devices (/dev/nvidia* or /dev/dri/renderD*) were detected on the host."
+    echo "⚙️  CPU Only mode selected. Skipping hardware GPU bindings..."
 fi
 
 # --- 7. Application Setup ---
