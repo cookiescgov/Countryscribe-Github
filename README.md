@@ -15,13 +15,23 @@ County Scribe is an open-source tool designed to provide local governments with 
 
 ---
 
-## 🚀 Quick Install (Proxmox LXC)
+## 🚀 Installation Options
 
-For IT Departments using Proxmox, you can deploy a fully configured **Debian 13 LXC** with **NVIDIA GPU Passthrough** and **Docker** using this single command in your Proxmox Host shell:
+County Scribe is fully containerized and runs flawlessly on virtually any operating system or Hypervisor via Docker. Choose the deployment method that fits your infrastructure:
 
+### Option 1: Proxmox LXC (Automated GPU Setup)
+For IT Departments using Proxmox, you can instantly deploy a fully configured **Debian 13 LXC** with automatic **NVIDIA GPU Passthrough** using this single command in your Proxmox Host shell:
 ```bash
 bash -c "$(wget -qLO - https://raw.githubusercontent.com/cookiescgov/Countryscribe-Github/main/install_proxmox.sh)"
 ```
+
+### Option 2: Universal Docker (Windows, Mac, Standard Linux)
+If you do not use Proxmox, you can easily run County Scribe anywhere Docker is installed.
+1. Download this entire repository to your computer (Code -> Download ZIP).
+2. Ensure you have **Docker Desktop** (Windows/Mac) or **Docker** (Linux) installed and running.
+3. Open the downloaded folder and double-click the launcher for your OS:
+   - **Windows:** Double-click `Windows_Install.bat`
+   - **Linux / Mac:** Open a terminal in the folder and run `bash Linux_Mac_Install.sh`
 
 ### **Installer Features:**
 *   **Master Control Menu:** A single interactive prompt handles fresh installations, rolling updates, and retroactively enabling GPU support.
