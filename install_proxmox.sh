@@ -4,9 +4,6 @@
 # 🏛️  County Scribe (郡書記)
 # Created with Care by: Luke Cook, Starke County Government IT Department
 # ==========================================================================================
-# We humbly thank you for choosing our transcription service.
-# This script is a standalone installer for Proxmox VE.
-# ==========================================================================================
 
 set -e
 
@@ -47,33 +44,30 @@ fi
 # --- 2. Gather Configuration ---
 NEXT_ID=$(pvesh get /cluster/nextid)
 CT_ID=$(get_input "Please provide the desired Container ID for your new Scribe:" "$NEXT_ID")
-CT_HOSTNAME=$(get_input "Please provide a hostname (DNS friendly, e.g., county-scribe):" "county-scribe")
-CT_PASSWORD=$(get_password "Please provide a secure root password for your peace of mind:")
+CT_HOSTNAME=$(get_input "Please provide a hostname (DNS friendly):" "county-scribe")
+CT_PASSWORD=$(get_password "Please provide a secure root password:")
 
-# Storage selection (Simplified for reliability)
 STORAGE_LIST=$(pvesm status | grep -E "dir|lvm|zfspool" | awk '{print $1 " " $2}' | xargs)
-CT_STORAGE=$(whiptail --title "County Scribe (郡書記)" --menu "Please select the most suitable storage for the container:" 15 70 6 $(echo $STORAGE_LIST) 3>&1 1>&2 2>&3)
+CT_STORAGE=$(whiptail --title "County Scribe (郡書記)" --menu "Please select the storage for the container:" 15 70 6 $(echo $STORAGE_LIST) 3>&1 1>&2 2>&3)
 
-# --- 3. Resource Allocation ---
-CT_CORES=$(get_input "How many CPU cores may we allocate for the Scribe's wisdom?" "4")
-CT_RAM=$(get_input "How many MiB of RAM may we offer for the Scribe's memory?" "8192")
-CT_DISK=$(get_input "How many GB of disk space shall we reserve for the Scribe's scrolls?" "40")
+CT_CORES=$(get_input "How many CPU cores may we allocate?" "4")
+CT_RAM=$(get_input "How many MiB of RAM?" "8192")
+CT_DISK=$(get_input "How many GB of disk space?" "40")
 
-# --- 4. Host Preparation ---
+# --- 3. Host Preparation ---
 echo "We are most humbly preparing the host environment..."
 if ! command -v git &> /dev/null; then
-    echo "Git is required to retrieve our scrolls. Installing now..."
     apt-get update && apt-get install -y git &>/dev/null
 fi
 
-# --- 5. Download Template ---
+# --- 4. Download Template ---
 echo "We are gracefully retrieving the Debian 13 template..."
 pveam update &>/dev/null
 TEMPLATE=$(pveam available --section system | grep "debian-13" | head -n1 | awk '{print $2}')
 pveam download local "$TEMPLATE" &>/dev/null
 
-# --- 6. Container Creation ---
-echo "We are carefully constructing the LXC container $CT_ID ($CT_HOSTNAME)..."
+# --- 5. Container Creation ---
+echo "We are carefully constructing the LXC container $CT_ID..."
 pct create "$CT_ID" "local:vztmpl/$(basename $TEMPLATE)" \
     --hostname "$CT_HOSTNAME" \
     --password "$CT_PASSWORD" \
@@ -87,13 +81,24 @@ pct create "$CT_ID" "local:vztmpl/$(basename $TEMPLATE)" \
     --onboot 1 \
     --timezone host
 
-# --- 7. GPU Passthrough Configuration ---
-echo "We are humbly mapping the NVIDIA GPU pathways for you..."
+# --- 6. GPU Passthrough Configuration (Polite Error Handling) ---
+echo "We are humbly mapping the NVIDIA GPU pathways..."
 CONF_FILE="/etc/pve/lxc/$CT_ID.conf"
 
-# Attempt to detect IDs
-NV_CTL_MAJOR=$(ls -l /dev/nvidiactl | awk '{print $5}' | cut -d, -f1 || echo "195")
-NV_UVM_MAJOR=$(ls -l /dev/nvidia-uvm | awk '{print $5}' | cut -d, -f1 || echo "234")
+# Detect IDs with fallbacks
+if [ -e /dev/nvidiactl ]; then
+    NV_CTL_MAJOR=$(ls -l /dev/nvidiactl | awk '{print $5}' | cut -d, -f1)
+else
+    echo "⚠️ We apologize, but /dev/nvidiactl was not found. Using fallback ID (195)."
+    NV_CTL_MAJOR="195"
+fi
+
+if [ -e /dev/nvidia-uvm ]; then
+    NV_UVM_MAJOR=$(ls -l /dev/nvidia-uvm | awk '{print $5}' | cut -d, -f1)
+else
+    echo "⚠️ We apologize, but /dev/nvidia-uvm was not found. Using fallback ID (234)."
+    NV_UVM_MAJOR="234"
+fi
 
 cat <<EOF >> $CONF_FILE
 # --- GPU PASSTHROUGH ---
@@ -105,16 +110,16 @@ lxc.mount.entry: /dev/nvidia-uvm dev/nvidia-uvm none bind,optional,create=file
 lxc.mount.entry: /dev/nvidia-uvm-tools dev/nvidia-uvm-tools none bind,optional,create=file
 EOF
 
-# --- 8. Application Setup ---
-echo "We are awakening the container and beginning the internal setup..."
+# --- 7. Application Setup ---
+echo "We are awakening the container and purifying the internal setup..."
 pct start "$CT_ID"
 sleep 10
 
 echo "The Scribe is now preparing the internal laboratory (~15 minutes)..."
 pct exec "$CT_ID" -- bash -c "$(curl -fsSL https://raw.githubusercontent.com/cookiescgov/Countryscribe-Github/main/setup_app.sh)"
 
-# --- 9. Finalization ---
-msg_box "The installation is complete. We are honored to have served you.\n\nYour County Scribe is now operational.\n\nStarke County Government: Secure. Local. Transparent."
+# --- 8. Finalization ---
+msg_box "The installation is complete. We are honored to have served you.\n\nStarke County Government: Secure. Local. Transparent."
 
 echo -e "\nCounty Scribe is ready!"
 IP=$(pct exec "$CT_ID" -- hostname -I | awk '{print $1}')
