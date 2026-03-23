@@ -54,7 +54,8 @@ fi
 
 cd /opt/county-scribe
 echo "🏗️  Building Docker containers. This process may take a few moments..."
-docker compose up -d --build
+# Use plain progress to prevent Proxmox Web Shell from spamming animated lines
+BUILDKIT_PROGRESS=plain docker compose up -d --build
 
 echo "✅  County Scribe is now operational."
 echo "------------------------------------------------------------"
