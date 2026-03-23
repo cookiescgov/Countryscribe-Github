@@ -137,28 +137,15 @@ if [ "$CT_HW" == "gpu" ]; then
     echo "Configuring GPU passthrough for container $CT_ID..."
     echo "# --- GPU PASSTHROUGH ---" >> $CONF_FILE
 
-# Process NVIDIA Devices
-has_gpu=0
-for dev in /dev/nvidia*; do
-    if [ -e "$dev" ]; then
-        major=$(ls -l "$dev" | awk '{print $5}' | cut -d, -f1)
-        minor=$(ls -l "$dev" | awk '{print $6}')
-        echo "lxc.cgroup2.devices.allow: c $major:* rwm" >> $CONF_FILE
-        echo "lxc.mount.entry: $dev ${dev#/dev/} none bind,optional,create=file" >> $CONF_FILE
-        has_gpu=1
-    fi
-done
-
-# Process standard DRI / QuickSync / AMD Devices
-for dev in /dev/dri/renderD*; do
-    if [ -e "$dev" ]; then
-        major=$(ls -l "$dev" | awk '{print $5}' | cut -d, -f1)
-        minor=$(ls -l "$dev" | awk '{print $6}')
-        echo "lxc.cgroup2.devices.allow: c $major:* rwm" >> $CONF_FILE
-        echo "lxc.mount.entry: $dev ${dev#/dev/} none bind,optional,create=file" >> $CONF_FILE
-        has_gpu=1
-    fi
-done
+# Process NVIDIA Devices (Hardcoded for stability)
+    echo "lxc.cgroup2.devices.allow: c 195:* rwm" >> $CONF_FILE
+    echo "lxc.cgroup2.devices.allow: c 511:* rwm" >> $CONF_FILE
+    
+    echo "lxc.mount.entry: /dev/nvidia0 dev/nvidia0 none bind,optional,create=file" >> $CONF_FILE
+    echo "lxc.mount.entry: /dev/nvidiactl dev/nvidiactl none bind,optional,create=file" >> $CONF_FILE
+    echo "lxc.mount.entry: /dev/nvidia-uvm dev/nvidia-uvm none bind,optional,create=file" >> $CONF_FILE
+    
+    has_gpu=1
 
 if [ "$has_gpu" -eq 1 ]; then
     echo "lxc.hook.autodev: /var/lib/lxc/$CT_ID/mount_hook.sh" >> $CONF_FILE
