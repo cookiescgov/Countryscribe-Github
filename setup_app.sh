@@ -79,10 +79,18 @@ BUILDKIT_PROGRESS=plain docker compose up -d --build
 # Inject Global Update Shortcut inside LXC
 cat <<'EOF' > /usr/local/bin/update
 #!/bin/bash
-echo "Updating County Scribe..."
+echo "=========================================="
+echo "Updating Operating System (apt upgrade)..."
+echo "=========================================="
+apt-get update && apt-get upgrade -y
+
+echo "=========================================="
+echo "Updating County Scribe Application Code..."
+echo "=========================================="
 cd /opt/county-scribe || exit
 git pull
 bash setup_app.sh
+echo "✅ Full System Update Complete!"
 EOF
 chmod +x /usr/local/bin/update
 
