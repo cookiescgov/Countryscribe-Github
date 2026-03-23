@@ -5,7 +5,7 @@ services:
     container_name: county-scribe
     build:
       context: .
-      dockerfile: backend/Dockerfile
+      dockerfile: Dockerfile
     image: county_scribe-county-scribe:latest
 
     # 👇 THIS IS THE CRITICAL FIX
