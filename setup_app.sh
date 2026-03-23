@@ -73,7 +73,16 @@ else
 fi
 
 echo "🏗️  Building Docker containers. This process may take a few moments..."
-docker compose up -d --build
+
+# Determine User's Preferred Logging Style
+DOCKER_STYLE=$(cat /tmp/docker_style.txt 2>/dev/null || echo "animated")
+
+if [ "$DOCKER_STYLE" == "plain" ]; then
+    echo "💡 Using verbose plain-text logger..."
+    BUILDKIT_PROGRESS=plain docker compose up -d --build
+else
+    docker compose up -d --build
+fi
 
 # Inject Global Update Shortcut inside LXC
 cat <<'EOF' > /usr/local/bin/update

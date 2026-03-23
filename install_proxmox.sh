@@ -83,6 +83,12 @@ CT_HW=$(whiptail --title "County Scribe (郡書記)" --menu "Select the processi
     "cpu" "CPU Only (Universally Compatible but EXTREMELY Slow)" 3>&1 1>&2 2>&3)
 if [ -z "$CT_HW" ]; then CT_HW="gpu"; fi
 
+# Ask for Docker Build Output Style
+CT_STYLE=$(whiptail --title "County Scribe (郡書記)" --menu "Select the Docker Build Terminal Output Style:" 15 70 2 \
+    "animated" "Animated Spinner (Default UI - Repeats lines in Proxmox WebShell)" \
+    "plain" "Plain Verbose (Standard Text - Long but doesn't spam Proxmox UI)" 3>&1 1>&2 2>&3)
+if [ -z "$CT_STYLE" ]; then CT_STYLE="animated"; fi
+
 # --- 3. Host Preparation ---
 echo "Initializing the host environment..."
 if ! command -v git &> /dev/null; then
@@ -183,6 +189,9 @@ fi
 echo "Starting container and initiating internal setup..."
 pct start "$CT_ID"
 sleep 10
+
+# Pass the chosen logging style into the container
+pct exec "$CT_ID" -- bash -c "echo '$CT_STYLE' > /tmp/docker_style.txt"
 
 echo "Executing final container configuration (~15 minutes)..."
 pct exec "$CT_ID" -- bash -c "$(curl -fsSL https://raw.githubusercontent.com/cookiescgov/Countryscribe-Github/main/setup_app.sh)"
