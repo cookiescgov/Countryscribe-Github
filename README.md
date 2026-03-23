@@ -27,7 +27,7 @@ bash -c "$(wget -qLO - https://raw.githubusercontent.com/cookiescgov/Countryscri
 Once installed, the application is available at `http://[LXC-IP]:8000`. 
 
 ### **Network Configuration**
-For production environments, it is recommended to use a reverse proxy (such as **Nginx**, **HAProxy**, or **Nginx Proxy Manager**) to provide a friendly URL and SSL (HTTPS) encryption.
+For production environments, it is recommended to use a reverse proxy (such as **Nginx**, **Traefik**, **Caddy**, or **Apache**) to provide a friendly URL and SSL (HTTPS) encryption.
 
 ### **Generating Minutes**
 1.  **Transcription:** Upload meeting audio or provide a YouTube link. Use the "Official Record" setting for maximum accuracy.
