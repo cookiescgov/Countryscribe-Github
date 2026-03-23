@@ -126,38 +126,26 @@ pct exec $CT_ID -- bash /root/setup.sh
 # --- 6. Final Code Injection (The "County Scribe" part) ---
 echo -e "\n${GREEN}Injecting County Scribe Source Code...${NC}"
 
-# Detect if we are running from inside a repo or a parent folder
-if [ -d "./backend" ] && [ -d "./LXC" ]; then
-    SRC_DIR="."
-    LXC_DIR="./LXC"
-elif [ -d "./county scribe/backend" ]; then
-    SRC_DIR="./county scribe"
-    LXC_DIR="./LXC"
-else
-    echo -e "${RED}Error: Source files not found.${NC}"
-    echo "Please ensure you are running this script from the root of the project."
-    exit 1
-fi
+# Since we are running this from the cloned repo root
+SRC_DIR="."
 
 echo "Found source files in $SRC_DIR. Copying..."
 pct exec $CT_ID -- mkdir -p /opt/county-scribe/backend /opt/county-scribe/frontend /opt/county-scribe/uploads /opt/county-scribe/archive
 
-# Copy source files
+# Copy source files (cloned from GitHub)
+# In the GitHub repo, backend/ and frontend/ are in the root
 tar -cf - -C "$SRC_DIR" backend | pct exec $CT_ID -- tar -xf - -C /opt/county-scribe --strip-components=1
 tar -cf - -C "$SRC_DIR" frontend | pct exec $CT_ID -- tar -xf - -C /opt/county-scribe --strip-components=1
 
-# Override with LXC-specific files (the ones we modified)
-pct cp $CT_ID "$LXC_DIR/Dockerfile" /opt/county-scribe/backend/Dockerfile
-pct cp $CT_ID "$LXC_DIR/requirements.txt" /opt/county-scribe/backend/requirements.txt
-pct cp $CT_ID "$LXC_DIR/main.py" /opt/county-scribe/backend/main.py
-pct cp $CT_ID "$LXC_DIR/App.js" /opt/county-scribe/frontend/src/App.js
+# Override/Ensure LXC-specific files are used (they are in the root of the repo)
+pct cp $CT_ID "$SRC_DIR/Dockerfile" /opt/county-scribe/backend/Dockerfile
+pct cp $CT_ID "$SRC_DIR/requirements.txt" /opt/county-scribe/backend/requirements.txt
+pct cp $CT_ID "$SRC_DIR/main.py" /opt/county-scribe/backend/main.py
+pct cp $CT_ID "$SRC_DIR/App.js" /opt/county-scribe/frontend/src/App.js
 
 # Copy root files
 if [ -f "$SRC_DIR/docker-compose.yml" ]; then
     pct cp $CT_ID "$SRC_DIR/docker-compose.yml" /opt/county-scribe/docker-compose.yml
-fi
-if [ -f "$SRC_DIR/.env" ]; then
-    pct cp $CT_ID "$SRC_DIR/.env" /opt/county-scribe/.env
 fi
 
 echo -e "${YELLOW}Building Docker Image (This will take ~10 minutes)...${NC}"

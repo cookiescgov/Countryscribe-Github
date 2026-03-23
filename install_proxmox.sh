@@ -57,16 +57,17 @@ echo "Starting Installation... Please wait."
 # Clone/Update Repo to /tmp
 REPO_DIR="/tmp/county-scribe-install"
 if [ -d "$REPO_DIR" ]; then rm -rf "$REPO_DIR"; fi
-git clone https://github.com/[USERNAME]/county-scribe "$REPO_DIR"
+git clone https://github.com/cookiescgov/Countryscribe-Github "$REPO_DIR"
 
 # Run the Build Script with the gathered variables
 cd "$REPO_DIR"
 # Inject variables into environment so build_lxc.sh can use them without 'read'
 export CT_ID CT_HOSTNAME CT_PASSWORD CT_STORAGE
-chmod +x LXC/build_lxc.sh
+chmod +x build_lxc.sh
 
 # Run the build script
-./LXC/build_lxc.sh
+./build_lxc.sh
+
 
 # Cleanup
 rm -rf "$REPO_DIR"
