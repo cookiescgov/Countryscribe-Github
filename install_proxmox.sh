@@ -36,8 +36,25 @@ cat <<EOF
      Created by: Luke Cook | Starke County Government IT
 EOF
 
-if ! ask_yesno "Welcome to the County Scribe installation service.\n\nWould you like to proceed with the installation?"; then
-    echo "Installation cancelled by user."
+ACTION=$(whiptail --title "County Scribe (郡書記)" --menu "Welcome to County Scribe! Please select an action:" 15 70 3 \
+    "install" "Install a new County Scribe Container" \
+    "update" "Update an existing Container's App Code" \
+    "gpu_enable" "Enable GPU support on an existing CPU container" 3>&1 1>&2 2>&3)
+
+if [ "$ACTION" == "gpu_enable" ]; then
+    echo "Launching GPU Upgrader..."
+    bash -c "$(curl -fsSL https://raw.githubusercontent.com/cookiescgov/Countryscribe-Github/main/enable_gpu.sh)"
+    exit 0
+elif [ "$ACTION" == "update" ]; then
+    CT_ID=$(whiptail --title "County Scribe Updater" --inputbox "Please enter the existing LXC ID to update:" 10 60 3>&1 1>&2 2>&3)
+    if [ -n "$CT_ID" ]; then
+        echo "Updating internal laboratory code..."
+        pct exec "$CT_ID" -- bash -c "cd /opt/county-scribe && git pull && bash setup_app.sh"
+        echo "✅ Update Complete!"
+    fi
+    exit 0
+elif [ -z "$ACTION" ]; then
+    echo "Action cancelled by user."
     exit 0
 fi
 

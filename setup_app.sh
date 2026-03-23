@@ -76,5 +76,16 @@ echo "🏗️  Building Docker containers. This process may take a few moments..
 # Use plain progress to prevent Proxmox Web Shell from spamming animated lines
 BUILDKIT_PROGRESS=plain docker compose up -d --build
 
+# Inject Global Update Shortcut inside LXC
+cat <<'EOF' > /usr/local/bin/update
+#!/bin/bash
+echo "Updating County Scribe..."
+cd /opt/county-scribe || exit
+git pull
+bash setup_app.sh
+EOF
+chmod +x /usr/local/bin/update
+
 echo "✅  County Scribe is now operational."
+echo "💡  Pro Tip: You can type 'update' at any time in this console to pull the latest changes!"
 echo "------------------------------------------------------------"
