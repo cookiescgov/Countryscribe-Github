@@ -151,6 +151,35 @@ def health():
 
 
 # ─────────────────────────────────────────────
+# Department User Management (Auth-Free)
+# ─────────────────────────────────────────────
+@app.get("/api/users")
+def get_all_users():
+    """Returns a purely string-based list of available departments from DB."""
+    users = load_users()
+    return list(users.keys())
+
+
+@app.post("/api/register")
+async def register_department(username: str = Form(...)):
+    """Accepts a new department name and saves it to the dropdown database."""
+    save_user_to_db(username.strip())
+    return {"message": "Department created", "username": username.strip()}
+
+
+@app.delete("/api/users/{username}")
+async def delete_department(username: str):
+    """Deletes a department from the dropdown database."""
+    users = load_users()
+    if username in users:
+        del users[username]
+        with open(USER_DB_FILE, "w", encoding="utf-8") as f:
+            json.dump(users, f, indent=2)
+        return {"message": "Department deleted"}
+    raise HTTPException(status_code=404, detail="Department not found")
+
+
+# ─────────────────────────────────────────────
 # Archive endpoints (per-user)
 # ─────────────────────────────────────────────
 @app.get("/api/archives")

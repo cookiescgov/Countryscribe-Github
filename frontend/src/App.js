@@ -67,6 +67,18 @@ function App() {
       setView('transcribe');
   };
 
+  const deleteDepartment = async (deptName) => {
+      if (!window.confirm(`Permanently remove the ${deptName} department from the list?`)) return;
+      try {
+          await axios.delete(`/api/users/${deptName}`);
+          // Force a list refresh
+          const res = await axios.get('/api/users');
+          setAvailableUsers(res.data);
+      } catch (e) {
+          alert("Failed to delete department");
+      }
+  };
+
 
 
   // --- EXISTING LOGIC ---
@@ -255,12 +267,17 @@ function App() {
                 </div>
                 
                 {/* User List */}
-                <div className="d-grid gap-3 mb-4">
+                <div className="d-grid gap-2 mb-4">
                     {availableUsers.length > 0 ? (
                         availableUsers.map(u => (
-                            <button key={u} className="btn btn-outline-primary btn-lg fw-bold" onClick={() => performLogin(u)}>
-                                👤 {u}
-                            </button>
+                            <div key={u} className="d-flex align-items-center">
+                                <button className="btn btn-outline-primary btn-lg fw-bold flex-grow-1 text-start" onClick={() => performLogin(u)}>
+                                    👤 {u}
+                                </button>
+                                <button className="btn btn-outline-danger ms-2" title="Delete Department" onClick={() => deleteDepartment(u)}>
+                                    🗑️
+                                </button>
+                            </div>
                         ))
                     ) : (
                         <p className="text-center text-muted small">No accounts found. Create one below!</p>
