@@ -1,43 +1,60 @@
 # 🏛️ County Scribe
-**Official local, secure meeting transcription tool.**
+**Secure, Local Audio Transcription for Local Government.**
 
-This version is optimized for **Proxmox LXC (Debian 13)** with full **NVIDIA GPU Passthrough**. 
+County Scribe is an open-source tool designed to provide local governments with a secure, self-hosted solution for transcribing public meetings. By running locally on your own hardware, it ensures that sensitive data never leaves your infrastructure while providing high-accuracy transcripts for official records.
+
 ---
 
-## 🛠️ Proxmox LXC Installation (The "One-Liner")
-Run this single command in your **Proxmox Host Shell** to build the entire system automatically.
+## 🚀 Quick Install (Proxmox LXC)
+
+For IT Departments using Proxmox, you can deploy a fully configured **Debian 13 LXC** with **NVIDIA GPU Passthrough** and **Docker** using this single command in your Proxmox Host shell:
 
 ```bash
 bash -c "$(wget -qLO - https://raw.githubusercontent.com/cookiescgov/Countryscribe-Github/main/install_proxmox.sh)"
 ```
 
-### **What the Installer Does:**
-*   **Interactive UI:** Asks for Container ID, Hostname, and Storage.
-*   **Automated LXC:** Creates a Debian 13 (Trixie) container.
-*   **GPU Passthrough:** Auto-detects and mounts your NVIDIA GPU.
-*   **Docker & Toolkit:** Installs Docker and NVIDIA Container Toolkit.
-*   **County Scribe:** Deploys the stripped-down, high-accuracy build.
-
----
-
-## 💻 Local Management (GitHub Desktop)
-Use these steps to manage the code you've published to GitHub.
-
-1. **Open GitHub Desktop.**
-2. **Select Repository:** Choose `Countryscribe-Github`.
-3. **Commit & Push:** Whenever you make changes locally, type a summary and click **Commit to main**, then **Push origin**.
-4. **Deploy:** Any changes pushed here will be used the next time you run the Proxmox one-liner.
+### **Installer Features:**
+*   **Automated Provisioning:** Creates a Debian 13 (Trixie) container.
+*   **GPU Acceleration:** Auto-detects and configures NVIDIA GPU passthrough for fast AI inference.
+*   **Containerized:** Automatically installs Docker and the NVIDIA Container Toolkit.
+*   **Optimized Build:** Deploys a high-accuracy WhisperX pipeline optimized for clear government records.
 
 ---
 
 ## 📖 User Guide
-*   **Access:** Once installed, go to `http://[LXC-IP]:8000`.
-*   **Accuracy:** Use "Official Record" for the best results.
-*   **NotebookLM:** Use the "Copy Text" button to grab the clean transcript and paste it into Google NotebookLM for automatic minutes generation.
-*   **Retention:** Transcripts are auto-archived and kept for 180 days.
+
+### **Accessing the Interface**
+Once installed, the application is available at `http://[LXC-IP]:8000`. 
+
+### **Network Configuration**
+For production environments, it is recommended to use a reverse proxy (such as **Nginx**, **HAProxy**, or **Nginx Proxy Manager**) to provide a friendly URL and SSL (HTTPS) encryption.
+
+### **Generating Minutes**
+1.  **Transcription:** Upload meeting audio or provide a YouTube link. Use the "Official Record" setting for maximum accuracy.
+2.  **Exporting:** Use the **Copy Text** button to capture the clean transcript.
+3.  **AI Integration:** Paste the transcript into tools like **Google NotebookLM** to generate formal meeting minutes, summaries, and action items instantly.
+
+### **Data Retention**
+The system automatically archives transcripts and stores them locally for **180 days** by default. This can be managed via the "Archives" tab in the UI.
 
 ---
 
-## ⚠️ Troubleshooting
-*   **GPU Not Found:** Ensure NVIDIA drivers are installed on the **Proxmox Host**.
-*   **System Busy:** Only one meeting can be processed at a time.
+## 🛠️ Development & Contribution
+
+If you wish to modify the source code or contribute to the project:
+
+1.  **Fork/Clone:** Clone the repository to your local workstation.
+2.  **Management:** Use **GitHub Desktop** or the CLI to manage your changes.
+3.  **Pushing Updates:** Pushing changes to your fork allows you to redeploy the updated version using the installer script.
+
+---
+
+## ⚠️ Requirements & Troubleshooting
+*   **Hardware:** Requires an NVIDIA GPU for acceptable transcription speeds.
+*   **Drivers:** Ensure the latest NVIDIA drivers are installed on the **Proxmox Host** before running the installer.
+*   **Concurrency:** The system is designed to process one meeting at a time to maximize GPU efficiency.
+
+---
+
+## 📜 License
+This project is licensed under the **AGPL v3 License** to ensure that improvements made by the community remain available to all local governments.
