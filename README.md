@@ -1,54 +1,45 @@
-# County Scribe - Proxmox LXC Deployment
+# 🏛️ County Scribe
+**Official local, secure meeting transcription tool.**
 
-This folder contains the necessary scripts and modified files to deploy County Scribe in a **Debian 13 LXC** on Proxmox with **GPU Passthrough** and **Docker**.
+This version is optimized for **Proxmox LXC (Debian 13)** with full **NVIDIA GPU Passthrough**. 
+*Note: Speaker Identification (Diarization) has been removed from this build for maximum accuracy and simplicity.*
 
-## 📁 Files in this folder
-- `build_lxc.sh`: The main installer script to run on your Proxmox Host.
-- `Dockerfile`: Modified backend Dockerfile (removes `pyannote-audio`).
-- `requirements.txt`: Modified requirements (removes `pyannote`).
-- `main.py`: Modified `main.py` (removes all speaker/diarization logic).
-- `App.js`: Modified frontend (removes all speaker/diarization UI).
+---
 
-## 🚀 How to Use
+## 🛠️ Proxmox LXC Installation (The "One-Liner")
+Run this single command in your **Proxmox Host Shell** to build the entire system automatically.
 
-1. **Transfer Files to Proxmox Host:**
-   Copy the *entire* `LXC` folder and the `county scribe` folder to your Proxmox host (e.g., using SCP or SFTP).
-   
-   The structure on Proxmox should look like this:
-   ```text
-   /root/
-   ├── LXC/
-   │   ├── build_lxc.sh
-   │   ├── Dockerfile
-   │   ├── main.py
-   │   └── ...
-   └── county scribe/
-       ├── backend/
-       ├── frontend/
-       └── ...
-   ```
+```bash
+bash -c "$(wget -qLO - https://raw.githubusercontent.com/cookiescgov/Countryscribe-Github/main/install_proxmox.sh)"
+```
 
-2. **Run the Installer:**
-   On your Proxmox shell, navigate to the parent directory and run:
-   ```bash
-   chmod +x LXC/build_lxc.sh
-   ./LXC/build_lxc.sh
-   ```
+### **What the Installer Does:**
+*   **Interactive UI:** Asks for Container ID, Hostname, and Storage.
+*   **Automated LXC:** Creates a Debian 13 (Trixie) container.
+*   **GPU Passthrough:** Auto-detects and mounts your NVIDIA GPU.
+*   **Docker & Toolkit:** Installs Docker and NVIDIA Container Toolkit.
+*   **County Scribe:** Deploys the stripped-down, high-accuracy build.
 
-3. **Follow the Prompts:**
-   - Enter your desired **Container ID** and **Hostname**.
-   - Enter a **Root Password**.
-   - Select your **Storage** (e.g., `local-lvm` or `local-zfs`).
+---
 
-4. **Completion:**
-   The script will:
-   - Create the LXC.
-   - Configure GPU passthrough (detecting your Nvidia IDs automatically).
-   - Install Docker and the Nvidia Container Toolkit.
-   - Inject the modified code (stripping all speaker logic).
-   - Start the Docker containers.
+## 💻 Local Management (GitHub Desktop)
+Use these steps to manage the code you've published to GitHub.
 
-## ⚠️ Notes
-- **Speaker Identification:** This version has been **completely stripped** of speaker identification/diarization as requested.
-- **GPU Drivers:** Ensure you have the Nvidia drivers installed on your **Proxmox Host**. The LXC will share these drivers.
-- **VRAM:** Whisper models (especially `large-v3`) require significant VRAM. 8GB+ is recommended for the container.
+1. **Open GitHub Desktop.**
+2. **Select Repository:** Choose `Countryscribe-Github`.
+3. **Commit & Push:** Whenever you make changes locally, type a summary and click **Commit to main**, then **Push origin**.
+4. **Deploy:** Any changes pushed here will be used the next time you run the Proxmox one-liner.
+
+---
+
+## 📖 User Guide
+*   **Access:** Once installed, go to `http://[LXC-IP]:8000`.
+*   **Accuracy:** Use "Official Record" for the best results.
+*   **NotebookLM:** Use the "Copy Text" button to grab the clean transcript and paste it into Google NotebookLM for automatic minutes generation.
+*   **Retention:** Transcripts are auto-archived and kept for 180 days.
+
+---
+
+## ⚠️ Troubleshooting
+*   **GPU Not Found:** Ensure NVIDIA drivers are installed on the **Proxmox Host**.
+*   **System Busy:** Only one meeting can be processed at a time.
