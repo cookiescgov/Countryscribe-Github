@@ -10,9 +10,28 @@
 # Sourcing Proxmox Helper Functions
 source <(curl -fsSL https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main/misc/build.func)
 
-# --- OVERRIDE BRANDING FUNCTIONS ---
-# This ensures the UI reflects Luke Cook / Starke County identity
+# --- THE OMOTENASHI INTERCEPTOR ---
+# This function intercepts all UI calls to ensure total branding purity.
+function whiptail() {
+  local ARGS=("$@")
+  for i in "${!ARGS[@]}"; do
+    # Replace the generic background title
+    if [[ "${ARGS[$i]}" == "Proxmox VE Helper Scripts" ]]; then
+      ARGS[$i]="County Scribe - Starke County Government IT"
+    fi
+    # Replace the generic box titles
+    if [[ "${ARGS[$i]}" == "Community-Scripts Options" ]]; then
+      ARGS[$i]="County Scribe: Humble Installation Service"
+    fi
+    # Soften the "Default Settings" prompt strings if they appear
+    if [[ "${ARGS[$i]}" == "Would you like to proceed with the Default Installation?" ]]; then
+      ARGS[$i]="Would you be so kind as to proceed with our recommended Standard Installation?\n\n(We have prepared everything for your comfort.)"
+    fi
+  done
+  command whiptail "${ARGS[@]}"
+}
 
+# --- OVERRIDE BRANDING FUNCTIONS ---
 function header_info {
 clear
 cat <<EOF
@@ -27,11 +46,10 @@ EOF
 }
 
 function start {
-  if (whiptail --title "County Scribe Installation" --yesno "Would you like to proceed with the Standard Installation of County Scribe?\n\n(We most humbly recommend 'Yes' for the best experience.)" 10 68); then
-    msg_info "Setting up the Scribe's environment with great care..."
+  if (whiptail --title "County Scribe Installation" --yesno "Would you be so kind as to proceed with the Standard Installation of County Scribe?\n\n(We most humbly recommend this path for the most harmonious experience.)" 12 70); then
+    msg_info "We are setting up the Scribe's environment with the utmost care..."
   else
-    msg_info "You have chosen the Advanced Path. We shall proceed with extra attention to detail."
-    # Set advanced flag for the build.func
+    msg_info "You have chosen the Advanced Path. We shall attend to every detail with extra devotion."
     export ADVANCED="yes"
   fi
 }
