@@ -85,9 +85,9 @@ if [ -z "$CT_HW" ]; then CT_HW="gpu"; fi
 
 # Ask for Docker Build Output Style
 CT_STYLE=$(whiptail --title "County Scribe (郡書記)" --menu "Select the Docker Build Terminal Output Style:" 15 70 2 \
-    "animated" "Animated Spinner (Default UI - Repeats lines in Proxmox WebShell)" \
-    "plain" "Plain Verbose (Standard Text - Long but doesn't spam Proxmox UI)" 3>&1 1>&2 2>&3)
-if [ -z "$CT_STYLE" ]; then CT_STYLE="animated"; fi
+    "default" "Default (Standard Docker Output)" \
+    "verbose" "Verbose (Detailed Plain Text Logger)" 3>&1 1>&2 2>&3)
+if [ -z "$CT_STYLE" ]; then CT_STYLE="default"; fi
 
 # --- 3. Host Preparation ---
 echo "Initializing the host environment..."

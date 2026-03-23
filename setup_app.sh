@@ -75,9 +75,9 @@ fi
 echo "🏗️  Building Docker containers. This process may take a few moments..."
 
 # Determine User's Preferred Logging Style
-DOCKER_STYLE=$(cat /tmp/docker_style.txt 2>/dev/null || echo "animated")
+DOCKER_STYLE=$(cat /tmp/docker_style.txt 2>/dev/null || echo "default")
 
-if [ "$DOCKER_STYLE" == "plain" ]; then
+if [ "$DOCKER_STYLE" == "verbose" ]; then
     echo "💡 Using verbose plain-text logger..."
     BUILDKIT_PROGRESS=plain docker compose up -d --build
 else
