@@ -24,10 +24,11 @@ bash -c "$(wget -qLO - https://raw.githubusercontent.com/cookiescgov/Countryscri
 ```
 
 ### **Installer Features:**
-*   **Automated Provisioning:** Creates a Debian 13 (Trixie) container.
-*   **GPU Acceleration:** Auto-detects and configures NVIDIA GPU passthrough for fast AI inference.
-*   **Containerized:** Automatically installs Docker and the NVIDIA Container Toolkit.
-*   **Optimized Build:** Deploys a high-accuracy WhisperX pipeline optimized for clear government records.
+*   **Master Control Menu:** A single interactive prompt handles fresh installations, rolling updates, and retroactively enabling GPU support.
+*   **Smart Hardware Detection:** Seamlessly offers NVIDIA GPU Passthrough for blazing speed, or a universally compatible CPU-only fallback mode.
+*   **Intelligent Auto-Discovery:** Automatically pre-fills Container IDs by scanning your Proxmox node for existing County Scribe deployments.
+*   **Fast, Dependency-Free AI:** Deploys a deeply optimized `faster-whisper` inference pipeline capable of transcribing massive files without bloated wrappers or cloud tokens.
+*   **Secure & Unprivileged:** Deploys as an ultra-secure Unprivileged LXC on Debian 13 without compromising direct hardware access.
 
 ---
 
