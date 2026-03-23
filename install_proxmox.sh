@@ -1,38 +1,33 @@
 #!/usr/bin/env bash
 
 # ==========================================================================================
-# 🏛️ County Scribe (郡書記)
+# 🏛️  County Scribe (郡書記)
 # Created with Care by: Luke Cook, Starke County Government IT Department
 # ==========================================================================================
 # We humbly thank you for choosing our transcription service.
+# This script is a standalone installer for Proxmox VE.
 # ==========================================================================================
 
-# Sourcing Proxmox Helper Functions
-source <(curl -fsSL https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main/misc/build.func)
+set -e
 
-# --- THE OMOTENASHI INTERCEPTOR ---
-# This function intercepts all UI calls to ensure total branding purity.
-function whiptail() {
-  local ARGS=("$@")
-  for i in "${!ARGS[@]}"; do
-    # Replace the generic background title
-    if [[ "${ARGS[$i]}" == "Proxmox VE Helper Scripts" ]]; then
-      ARGS[$i]="County Scribe - Starke County Government IT"
-    fi
-    # Replace the generic box titles
-    if [[ "${ARGS[$i]}" == "Community-Scripts Options" ]]; then
-      ARGS[$i]="County Scribe: Humble Installation Service"
-    fi
-    # Soften the "Default Settings" prompt strings if they appear
-    if [[ "${ARGS[$i]}" == "Would you like to proceed with the Default Installation?" ]]; then
-      ARGS[$i]="Would you be so kind as to proceed with our recommended Standard Installation?\n\n(We have prepared everything for your comfort.)"
-    fi
-  done
-  command whiptail "${ARGS[@]}"
+# --- UI Helper Functions ---
+function msg_box() {
+    whiptail --title "County Scribe (郡書記)" --msgbox "$1" 12 70
 }
 
-# --- OVERRIDE BRANDING FUNCTIONS ---
-function header_info {
+function ask_yesno() {
+    whiptail --title "County Scribe (郡書記)" --yesno "$1" 12 70
+}
+
+function get_input() {
+    whiptail --title "County Scribe (郡書記)" --inputbox "$1" 12 70 "$2" 3>&1 1>&2 2>&3
+}
+
+function get_password() {
+    whiptail --title "County Scribe (郡書記)" --passwordbox "$1" 12 70 3>&1 1>&2 2>&3
+}
+
+# --- 1. Welcome & Introduction ---
 clear
 cat <<EOF
    ______                            _____            _ _          
@@ -43,59 +38,62 @@ cat <<EOF
                            /____/                             
      Created by: Luke Cook | Starke County Government IT
 EOF
-}
 
-function start {
-  if (whiptail --title "County Scribe Installation" --yesno "Would you be so kind as to proceed with the Standard Installation of County Scribe?\n\n(We most humbly recommend this path for the most harmonious experience.)" 12 70); then
-    msg_info "We are setting up the Scribe's environment with the utmost care..."
-  else
-    msg_info "You have chosen the Advanced Path. We shall attend to every detail with extra devotion."
-    export ADVANCED="yes"
-  fi
-}
+if ! ask_yesno "Welcome to the County Scribe installation service.\n\nWe are honored to assist you with this deployment.\n\nWould you be so kind as to proceed with the installation?"; then
+    echo "We most humbly respect your decision. Installation cancelled."
+    exit 0
+fi
 
-# --- APP CONFIGURATION ---
-APP="County Scribe"
-var_tags="${var_tags:-omotenashi;government;transcription;nvidia}"
-var_cpu="${var_cpu:-4}"
-var_ram="${var_ram:-8192}"
-var_disk="${var_disk:-40}"
-var_os="${var_os:-debian}"
-var_version="${var_version:-13}"
-var_unprivileged="${var_unprivileged:-0}"
+# --- 2. Gather Configuration ---
+NEXT_ID=$(pvesh get /cluster/nextid)
+CT_ID=$(get_input "Please provide the desired Container ID for your new Scribe:" "$NEXT_ID")
+CT_HOSTNAME=$(get_input "Please provide a hostname (DNS friendly, e.g., county-scribe):" "county-scribe")
+CT_PASSWORD=$(get_password "Please provide a secure root password for your peace of mind:")
 
-header_info "$APP"
-variables
-color
-catch_errors
+# Storage selection (Simplified for reliability)
+STORAGE_LIST=$(pvesm status | grep -E "dir|lvm|zfspool" | awk '{print $1 " " $2}' | xargs)
+CT_STORAGE=$(whiptail --title "County Scribe (郡書記)" --menu "Please select the most suitable storage for the container:" 15 70 6 $(echo $STORAGE_LIST) 3>&1 1>&2 2>&3)
 
-function update_script() {
-  header_info
-  check_container_storage
-  check_container_resources
-  msg_info "We are most humbly refreshing your system resources"
-  $STD apt update
-  $STD apt upgrade -y 
-  msg_ok "The base system has been safely updated for your convenience"
-  msg_info "Gently deploying the latest County Scribe logic"
-  $STD bash -c "cd /opt/county-scribe && git pull && docker compose up -d --build"
-  msg_ok "We are pleased to inform you that the Scribe is now up to date"
-  exit
-}
+# --- 3. Resource Allocation ---
+CT_CORES=$(get_input "How many CPU cores may we allocate for the Scribe's wisdom?" "4")
+CT_RAM=$(get_input "How many MiB of RAM may we offer for the Scribe's memory?" "8192")
+CT_DISK=$(get_input "How many GB of disk space shall we reserve for the Scribe's scrolls?" "40")
 
-# Start the interactive process
-start
-build_container
-description
+# --- 4. Host Preparation ---
+echo "We are most humbly preparing the host environment..."
+if ! command -v git &> /dev/null; then
+    echo "Git is required to retrieve our scrolls. Installing now..."
+    apt-get update && apt-get install -y git &>/dev/null
+fi
 
-# --- Post-Build: GPU PASSTHROUGH ---
-msg_info "Please allow us to map the NVIDIA GPU pathways for your AI inference"
+# --- 5. Download Template ---
+echo "We are gracefully retrieving the Debian 13 template..."
+pveam update &>/dev/null
+TEMPLATE=$(pveam available --section system | grep "debian-13" | head -n1 | awk '{print $2}')
+pveam download local "$TEMPLATE" &>/dev/null
 
-CT_ID=$(pvesh get /cluster/nextid -1)
+# --- 6. Container Creation ---
+echo "We are carefully constructing the LXC container $CT_ID ($CT_HOSTNAME)..."
+pct create "$CT_ID" "local:vztmpl/$(basename $TEMPLATE)" \
+    --hostname "$CT_HOSTNAME" \
+    --password "$CT_PASSWORD" \
+    --storage "$CT_STORAGE" \
+    --memory "$CT_RAM" \
+    --cores "$CT_CORES" \
+    --rootfs "$CT_STORAGE:$CT_DISK" \
+    --net0 name=eth0,bridge=vmbr0,ip=dhcp \
+    --unprivileged 0 \
+    --features nesting=1 \
+    --onboot 1 \
+    --timezone host
+
+# --- 7. GPU Passthrough Configuration ---
+echo "We are humbly mapping the NVIDIA GPU pathways for you..."
 CONF_FILE="/etc/pve/lxc/$CT_ID.conf"
 
-NV_CTL_MAJOR=$(ls -l /dev/nvidiactl | awk '{print $5}' | cut -d, -f1)
-NV_UVM_MAJOR=$(ls -l /dev/nvidia-uvm | awk '{print $5}' | cut -d, -f1)
+# Attempt to detect IDs
+NV_CTL_MAJOR=$(ls -l /dev/nvidiactl | awk '{print $5}' | cut -d, -f1 || echo "195")
+NV_UVM_MAJOR=$(ls -l /dev/nvidia-uvm | awk '{print $5}' | cut -d, -f1 || echo "234")
 
 cat <<EOF >> $CONF_FILE
 # --- GPU PASSTHROUGH ---
@@ -106,19 +104,18 @@ lxc.mount.entry: /dev/nvidiactl dev/nvidiactl none bind,optional,create=file
 lxc.mount.entry: /dev/nvidia-uvm dev/nvidia-uvm none bind,optional,create=file
 lxc.mount.entry: /dev/nvidia-uvm-tools dev/nvidia-uvm-tools none bind,optional,create=file
 EOF
-msg_ok "The silicon power has been most respectfully harnessed"
 
-# --- Start Container and Run Setup ---
-msg_info "We are humbly awakening the container for you"
-pct start $CT_ID
+# --- 8. Application Setup ---
+echo "We are awakening the container and beginning the internal setup..."
+pct start "$CT_ID"
 sleep 10
 
-msg_info "Please be patient as we provision the Scribe (~15 minutes)"
-pct exec $CT_ID -- bash -c "$(curl -fsSL https://raw.githubusercontent.com/cookiescgov/Countryscribe-Github/main/setup_app.sh)"
+echo "The Scribe is now preparing the internal laboratory (~15 minutes)..."
+pct exec "$CT_ID" -- bash -c "$(curl -fsSL https://raw.githubusercontent.com/cookiescgov/Countryscribe-Github/main/setup_app.sh)"
 
-msg_ok "Installation is complete. We are honored to serve you.\n"
-echo -e "${CREATING}${GN}County Scribe is now fully operational!${CL}"
-echo -e "${INFO}${YW} You may access your secure interface here:${CL}"
-IP=$(pct exec $CT_ID -- hostname -I | awk '{print $1}')
-echo -e "${TAB}${GATEWAY}${BGN}http://${IP}:8000${CL}"
-echo -e "\n${INFO}${BGN}Starke County IT: Dedicated to your security and peace of mind.${CL}"
+# --- 9. Finalization ---
+msg_box "The installation is complete. We are honored to have served you.\n\nYour County Scribe is now operational.\n\nStarke County Government: Secure. Local. Transparent."
+
+echo -e "\nCounty Scribe is ready!"
+IP=$(pct exec "$CT_ID" -- hostname -I | awk '{print $1}')
+echo "Access it at: http://${IP}:8000"
