@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
 
 # ==========================================================================================
-# County Scribe - Proxmox Helper Script (Tteck-Style)
+# County Scribe - Official Proxmox Helper Script
 # ==========================================================================================
-# Copyright (c) 2021-2026 tteck (Refactored for County Scribe)
-# Source: https://github.com/community-scripts/ProxmoxVE
+# This script automates the deployment of County Scribe on Proxmox VE.
 # ==========================================================================================
 
 # Sourcing Proxmox Helper Functions
