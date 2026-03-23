@@ -10,8 +10,34 @@
 # Sourcing Proxmox Helper Functions
 source <(curl -fsSL https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main/misc/build.func)
 
-# App Configuration
-APP="County Scribe (Official Build)"
+# --- OVERRIDE BRANDING FUNCTIONS ---
+# This ensures the UI reflects Luke Cook / Starke County identity
+
+function header_info {
+clear
+cat <<EOF
+   ______                            _____            _ _          
+  / ____/___  __  ______  dH_ __  / ___/__________(_) |__  ___  
+ / /   / __ \/ / / / __ \/ __/ / / \__ \/ ___/ ___/ / '_ \/ _ \ 
+/ /___/ /_/ / /_/ / / / / /_/ /_/ /___/ / /__/ /  / / /_) /  __/ 
+\____/\____/\__,_/_/ /_/\__/\__, /____/\___/_/  /_/_.__/\___/  
+                           /____/                             
+     Created by: Luke Cook | Starke County Government IT
+EOF
+}
+
+function start {
+  if (whiptail --title "County Scribe Installation" --yesno "Would you like to proceed with the Standard Installation of County Scribe?\n\n(We most humbly recommend 'Yes' for the best experience.)" 10 68); then
+    msg_info "Setting up the Scribe's environment with great care..."
+  else
+    msg_info "You have chosen the Advanced Path. We shall proceed with extra attention to detail."
+    # Set advanced flag for the build.func
+    export ADVANCED="yes"
+  fi
+}
+
+# --- APP CONFIGURATION ---
+APP="County Scribe"
 var_tags="${var_tags:-omotenashi;government;transcription;nvidia}"
 var_cpu="${var_cpu:-4}"
 var_ram="${var_ram:-8192}"
@@ -39,6 +65,7 @@ function update_script() {
   exit
 }
 
+# Start the interactive process
 start
 build_container
 description
