@@ -5,6 +5,7 @@ import glob
 import re
 import gc
 import sys
+import subprocess
 from datetime import datetime, timedelta
 from typing import List, Optional
 from io import BytesIO
@@ -280,6 +281,33 @@ def download_youtube_audio(url: str) -> tuple[str, str]:
         return final_filename, title
 
 
+def normalize_audio(input_path: str) -> str:
+    """
+    Converts any audio/video file to a 16kHz mono WAV for optimal Whisper processing.
+    """
+    output_path = input_path + ".normalized.wav"
+    try:
+        print(f"Normalizing audio: {input_path} -> {output_path}", flush=True)
+        # -y (overwrite)
+        # -i (input)
+        # -ar 16000 (16kHz sample rate)
+        # -ac 1 (mono)
+        # -c:a pcm_s16le (standard WAV codec)
+        command = [
+            "ffmpeg", "-y", "-i", input_path,
+            "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le",
+            output_path
+        ]
+        result = subprocess.run(command, capture_output=True, text=True)
+        if result.returncode != 0:
+            print(f"FFmpeg Error: {result.stderr}", flush=True)
+            return input_path
+        return output_path
+    except Exception as e:
+        print(f"Normalization exception: {e}", flush=True)
+        return input_path
+
+
 # ─────────────────────────────────────────────
 # Transcribe endpoint
 # ─────────────────────────────────────────────
@@ -325,6 +353,10 @@ async def transcribe_audio(
                     f.write(content)
                     print(f"File saved. Size: {len(content)} bytes", flush=True)
 
+            # 1.5) Normalize to standard WAV
+            print("Preparing audio for AI model...", flush=True)
+            processed_audio_path = normalize_audio(temp_audio_path)
+
             # 2) Faster-Whisper Pipeline
             from faster_whisper import WhisperModel
             device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -339,7 +371,7 @@ async def transcribe_audio(
             model = WhisperModel(model_size, device=device, compute_type=compute_type)
 
             print("Starting Inference (transcribe)...", flush=True)
-            segments, info = model.transcribe(temp_audio_path, beam_size=5)
+            segments, info = model.transcribe(processed_audio_path, beam_size=5)
 
             result_segments = []
             for segment in segments:
@@ -399,12 +431,13 @@ async def transcribe_audio(
             raise HTTPException(status_code=500, detail=str(e))
 
         finally:
-            if temp_audio_path and os.path.exists(temp_audio_path):
-                try:
-                    os.remove(temp_audio_path)
-                    print(f"Cleaned up temp file: {temp_audio_path}", flush=True)
-                except Exception:
-                    pass
+            for p in [temp_audio_path, (temp_audio_path + ".normalized.wav" if temp_audio_path else None)]:
+                if p and os.path.exists(p):
+                    try:
+                        os.remove(p)
+                        print(f"Cleaned up temp file: {p}", flush=True)
+                    except Exception:
+                        pass
 
 
 # ─────────────────────────────────────────────
