@@ -23,6 +23,16 @@ from docx import Document
 import torch
 import yt_dlp
 
+# --- CUDA DIAGNOSTIC ---
+print(f"--- SYSTEM DIAGNOSTIC ---", flush=True)
+print(f"PyTorch version: {torch.__version__}", flush=True)
+print(f"CUDA Available: {torch.cuda.is_available()}", flush=True)
+if torch.cuda.is_available():
+    print(f"CUDA Device: {torch.cuda.get_device_name(0)}", flush=True)
+else:
+    print(f"Reason for CPU: `torch.cuda.is_available()` is False. Check if NVIDIA Container Toolkit is passing the GPU.", flush=True)
+print(f"-------------------------", flush=True)
+
 
 # ─────────────────────────────────────────────
 # Configuration

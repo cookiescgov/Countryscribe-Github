@@ -65,11 +65,15 @@ if command -v nvidia-smi &> /dev/null && nvidia-smi &> /dev/null; then
     cat <<EOF > docker-compose.override.yml
 services:
   county-scribe:
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
     deploy:
       resources:
         reservations:
           devices:
             - driver: nvidia
+              count: all
               capabilities: [gpu]
 EOF
 else
