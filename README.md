@@ -101,7 +101,7 @@ If you wish to modify the source code or contribute to the project:
 ---
 
 ## 🔧 Manual GPU Configuration (Advanced)
-If the automated installer fails to detect your drivers, or if you prefer to configure passthrough manually, you can add these lines to your LXC configuration file (located at `/etc/pve/lxc/[ID].conf` on your Proxmox host):
+There is no automatic gpu detection yet but  you can add these lines to your LXC configuration file (located at `/etc/pve/lxc/[ID].conf` on your Proxmox host if you have a A2000 GPU):
 
 ```bash
 # Allow NVIDIA device nodes
