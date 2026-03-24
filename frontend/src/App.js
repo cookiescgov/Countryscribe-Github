@@ -312,9 +312,9 @@ function App() {
       <nav className="navbar navbar-dark bg-primary px-4 shadow-sm" style={{ backgroundColor: '#0d47a1' }}>
         <span 
             className="navbar-brand mb-0 h1 d-flex align-items-center" 
-            onClick={handleLogout}
+            onClick={() => setView('transcribe')}
             style={{ cursor: 'pointer' }}
-            title="Return to Home / Select Department"
+            title="Return to New Transcription"
         >
           <span style={{ fontSize: '1.5rem', marginRight: '10px' }}>🏛️</span>
           County Scribe <span className="text-white-50 fs-6 ms-2">| Official Meeting Transcription</span>
