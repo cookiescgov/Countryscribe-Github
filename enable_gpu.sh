@@ -50,10 +50,13 @@ chmod +x /var/lib/lxc/$CT_ID/mount_hook.sh
 echo "# --- GPU PASSTHROUGH ---" >> $CONF_FILE
 echo "lxc.cgroup2.devices.allow: c 195:* rwm" >> $CONF_FILE
 echo "lxc.cgroup2.devices.allow: c 511:* rwm" >> $CONF_FILE
+echo "lxc.cgroup2.devices.allow: c 238:* rwm" >> $CONF_FILE
 
 echo "lxc.mount.entry: /dev/nvidia0 dev/nvidia0 none bind,optional,create=file" >> $CONF_FILE
 echo "lxc.mount.entry: /dev/nvidiactl dev/nvidiactl none bind,optional,create=file" >> $CONF_FILE
 echo "lxc.mount.entry: /dev/nvidia-uvm dev/nvidia-uvm none bind,optional,create=file" >> $CONF_FILE
+echo "lxc.mount.entry: /dev/nvidia-uvm-tools dev/nvidia-uvm-tools none bind,optional,create=file" >> $CONF_FILE
+echo "lxc.mount.entry: /dev/nvidia-modeset dev/nvidia-modeset none bind,optional,create=file" >> $CONF_FILE
 
 # 3. Deep Library Discovery (Find symlinks and versioned targets)
 echo "Scanning host for NVIDIA driver libraries..."
