@@ -58,27 +58,6 @@ echo "lxc.mount.entry: /dev/nvidia-uvm dev/nvidia-uvm none bind,optional,create=
 echo "lxc.mount.entry: /dev/nvidia-uvm-tools dev/nvidia-uvm-tools none bind,optional,create=file" >> $CONF_FILE
 echo "lxc.mount.entry: /dev/nvidia-modeset dev/nvidia-modeset none bind,optional,create=file" >> $CONF_FILE
 
-# 3. Deep Library Discovery (Find symlinks and versioned targets)
-echo "Scanning host for NVIDIA driver libraries..."
-for LIB in "libnvidia-ml.so.1" "libcuda.so.1"; do
-    HOST_PATH=$(find /usr/lib -name "$LIB" 2>/dev/null | head -n 1)
-    if [ -n "$HOST_PATH" ]; then
-        # Mount the symlink
-        echo "lxc.mount.entry: $HOST_PATH ${HOST_PATH#/ } none bind,optional,ro,create=file" >> $CONF_FILE
-        # Resolve and mount the real versioned file
-        REAL_PATH=$(readlink -f "$HOST_PATH")
-        if [ "$REAL_PATH" != "$HOST_PATH" ]; then
-             echo "lxc.mount.entry: $REAL_PATH ${REAL_PATH#/ } none bind,optional,ro,create=file" >> $CONF_FILE
-        fi
-    fi
-done
-
-# 4. Mount nvidia-smi binary
-NV_SMI=$(command -v nvidia-smi 2>/dev/null)
-if [ -n "$NV_SMI" ]; then
-    echo "lxc.mount.entry: $NV_SMI usr/bin/nvidia-smi none bind,optional,ro,create=file" >> $CONF_FILE
-fi
-
 echo "lxc.hook.autodev: /var/lib/lxc/$CT_ID/mount_hook.sh" >> $CONF_FILE
 
 whiptail --title "Success" --msgbox "GPU Hardware bindings successfully injected into LXC $CT_ID!\n\nThe container will now be restarted to apply changes and automatically rebuild Docker with NVIDIA support..." 12 70
