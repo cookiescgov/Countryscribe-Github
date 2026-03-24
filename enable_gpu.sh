@@ -36,7 +36,7 @@ if grep -q "lxc.cgroup2.devices.allow: c.*rwm" "$CONF_FILE"; then
 fi
 
 echo "Scanning for NVIDIA Hardware on Host..."
-
+if [ -c /dev/nvidia0 ] || [ -c /dev/dri/renderD128 ]; then
 # --- 2. GPU Passthrough Configuration ---
 mkdir -p /var/lib/lxc/$CT_ID/
 cat <<'EOF_HOOK' > /var/lib/lxc/$CT_ID/mount_hook.sh
