@@ -135,9 +135,16 @@ CONF_FILE="/etc/pve/lxc/$CT_ID.conf"
 
 if [ "$CT_HW" == "gpu" ]; then
     echo "Configuring GPU passthrough for container $CT_ID..."
-    echo "# --- GPU PASSTHROUGH ---" >> $CONF_FILE
+    
+    # Safety Guard: Check for existing config
+    if grep -q "lxc.cgroup2.devices.allow: c.*rwm" "$CONF_FILE"; then
+        echo "⚠️  Existing GPU configuration detected in $CONF_FILE."
+        # Note: In a non-interactive one-liner, we'll proceed if it's a fresh install, 
+        # but the master menu version (install_proxmox.sh) should ideally be safe.
+    fi
 
-# Provide Explicit User-Tested NVIDIA Hardware Mappings
+    # 1. Inject Stable Device IDs (NVIDIA Standard)
+    echo "# --- GPU PASSTHROUGH ---" >> $CONF_FILE
     echo "lxc.cgroup2.devices.allow: c 195:* rwm" >> $CONF_FILE
     echo "lxc.cgroup2.devices.allow: c 511:* rwm" >> $CONF_FILE
     
@@ -145,10 +152,26 @@ if [ "$CT_HW" == "gpu" ]; then
     echo "lxc.mount.entry: /dev/nvidiactl dev/nvidiactl none bind,optional,create=file" >> $CONF_FILE
     echo "lxc.mount.entry: /dev/nvidia-uvm dev/nvidia-uvm none bind,optional,create=file" >> $CONF_FILE
     
-    echo "lxc.mount.entry: /usr/bin/nvidia-smi usr/bin/nvidia-smi none bind,ro,create=file" >> $CONF_FILE
-    echo "lxc.mount.entry: /usr/lib/x86_64-linux-gnu/libnvidia-ml.so.1 usr/lib/x86_64-linux-gnu/libnvidia-ml.so.1 none bind,ro,create=file" >> $CONF_FILE
-    echo "lxc.mount.entry: /usr/lib/x86_64-linux-gnu/libcuda.so.1 usr/lib/x86_64-linux-gnu/libcuda.so.1 none bind,ro,create=file" >> $CONF_FILE
-    
+    # 2. Smart Library Discovery (Find paths on this specific host)
+    echo "Scanning host for NVIDIA driver libraries..."
+    NV_ML=$(find /usr/lib -name "libnvidia-ml.so.1" 2>/dev/null | head -n 1)
+    NV_CU=$(find /usr/lib -name "libcuda.so.1" 2>/dev/null | head -n 1)
+    NV_SMI=$(command -v nvidia-smi 2>/dev/null)
+
+    if [ -n "$NV_ML" ]; then
+        echo "lxc.mount.entry: $NV_ML ${NV_ML#/ } none bind,optional,ro,create=file" >> $CONF_FILE
+    else
+        echo "⚠️  Warning: libnvidia-ml.so.1 not found in /usr/lib. UI may not show GPU stats."
+    fi
+
+    if [ -n "$NV_CU" ]; then
+        echo "lxc.mount.entry: $NV_CU ${NV_CU#/ } none bind,optional,ro,create=file" >> $CONF_FILE
+    fi
+
+    if [ -n "$NV_SMI" ]; then
+        echo "lxc.mount.entry: $NV_SMI usr/bin/nvidia-smi none bind,optional,ro,create=file" >> $CONF_FILE
+    fi
+
     echo "lxc.hook.autodev: /var/lib/lxc/$CT_ID/mount_hook.sh" >> $CONF_FILE
 else
     echo "⚙️  CPU Only mode selected. Skipping hardware GPU bindings..."

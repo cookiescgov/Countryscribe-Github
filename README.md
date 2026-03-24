@@ -98,6 +98,27 @@ If you wish to modify the source code or contribute to the project:
 
 ---
 
+## 🔧 Manual GPU Configuration (Advanced)
+If the automated installer fails to detect your drivers, or if you prefer to configure passthrough manually, you can add these lines to your LXC configuration file (located at `/etc/pve/lxc/[ID].conf` on your Proxmox host):
+
+```bash
+# Allow NVIDIA device nodes
+lxc.cgroup2.devices.allow: c 195:* rwm
+lxc.cgroup2.devices.allow: c 511:* rwm
+
+# Mount NVIDIA character devices
+lxc.mount.entry: /dev/nvidia0 dev/nvidia0 none bind,optional,create=file
+lxc.mount.entry: /dev/nvidiactl dev/nvidiactl none bind,optional,create=file
+lxc.mount.entry: /dev/nvidia-uvm dev/nvidia-uvm none bind,optional,create=file
+
+# Mount NVIDIA driver binaries (Paths may vary by host OS)
+lxc.mount.entry: /usr/bin/nvidia-smi usr/bin/nvidia-smi none bind,ro,create=file
+lxc.mount.entry: /usr/lib/x86_64-linux-gnu/libnvidia-ml.so.1 usr/lib/x86_64-linux-gnu/libnvidia-ml.so.1 none bind,ro,create=file
+lxc.mount.entry: /usr/lib/x86_64-linux-gnu/libcuda.so.1 usr/lib/x86_64-linux-gnu/libcuda.so.1 none bind,ro,create=file
+```
+
+---
+
 ## 📜 License
 This project is licensed under the **AGPL v3 License** to ensure that improvements made by the community remain available to all local governments.
 

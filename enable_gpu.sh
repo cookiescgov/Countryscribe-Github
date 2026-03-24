@@ -46,17 +46,30 @@ chmod 666 ${LXC_ROOTFS_MOUNT}/dev/dri/renderD* 2>/dev/null || true
 EOF_HOOK
 chmod +x /var/lib/lxc/$CT_ID/mount_hook.sh
 
+# 2. Inject Stable Device IDs (NVIDIA Standard)
 echo "# --- GPU PASSTHROUGH ---" >> $CONF_FILE
-
 echo "lxc.cgroup2.devices.allow: c 195:* rwm" >> $CONF_FILE
 echo "lxc.cgroup2.devices.allow: c 511:* rwm" >> $CONF_FILE
 
 echo "lxc.mount.entry: /dev/nvidia0 dev/nvidia0 none bind,optional,create=file" >> $CONF_FILE
 echo "lxc.mount.entry: /dev/nvidiactl dev/nvidiactl none bind,optional,create=file" >> $CONF_FILE
 echo "lxc.mount.entry: /dev/nvidia-uvm dev/nvidia-uvm none bind,optional,create=file" >> $CONF_FILE
-echo "lxc.mount.entry: /usr/bin/nvidia-smi usr/bin/nvidia-smi none bind,ro,create=file" >> $CONF_FILE
-echo "lxc.mount.entry: /usr/lib/x86_64-linux-gnu/libnvidia-ml.so.1 usr/lib/x86_64-linux-gnu/libnvidia-ml.so.1 none bind,ro,create=file" >> $CONF_FILE
-echo "lxc.mount.entry: /usr/lib/x86_64-linux-gnu/libcuda.so.1 usr/lib/x86_64-linux-gnu/libcuda.so.1 none bind,ro,create=file" >> $CONF_FILE
+
+# 3. Smart Library Discovery (Find paths on this specific host)
+echo "Scanning host for NVIDIA driver libraries..."
+NV_ML=$(find /usr/lib -name "libnvidia-ml.so.1" 2>/dev/null | head -n 1)
+NV_CU=$(find /usr/lib -name "libcuda.so.1" 2>/dev/null | head -n 1)
+NV_SMI=$(command -v nvidia-smi 2>/dev/null)
+
+if [ -n "$NV_ML" ]; then
+    echo "lxc.mount.entry: $NV_ML ${NV_ML#/ } none bind,optional,ro,create=file" >> $CONF_FILE
+fi
+if [ -n "$NV_CU" ]; then
+    echo "lxc.mount.entry: $NV_CU ${NV_CU#/ } none bind,optional,ro,create=file" >> $CONF_FILE
+fi
+if [ -n "$NV_SMI" ]; then
+    echo "lxc.mount.entry: $NV_SMI usr/bin/nvidia-smi none bind,optional,ro,create=file" >> $CONF_FILE
+fi
 
 echo "lxc.hook.autodev: /var/lib/lxc/$CT_ID/mount_hook.sh" >> $CONF_FILE
 
