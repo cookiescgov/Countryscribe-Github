@@ -4,6 +4,7 @@ import json
 import glob
 import re
 import gc
+import sys
 from datetime import datetime, timedelta
 from typing import List, Optional
 from io import BytesIO
@@ -99,13 +100,6 @@ def save_user_to_db(username: str):
             pass
 
 
-def get_user(username: str):
-    users = load_users()
-    if username in users:
-        return User(**users[username])
-    return None
-
-
 # ─────────────────────────────────────────────
 # Identity helpers (Auth-Free Department Tagging)
 # ─────────────────────────────────────────────
@@ -121,7 +115,6 @@ async def get_current_user(x_department: str = Header(default="Unknown_Departmen
 # Archive helpers
 # ─────────────────────────────────────────────
 def get_user_archive_dir(username: str) -> str:
-    # "Council/Commissioners" -> "Council_Commissioners"
     safe_name = re.sub(r"[^a-zA-Z0-9]", "_", username)
     user_dir = os.path.join(ARCHIVE_ROOT, safe_name)
     if not os.path.exists(user_dir):
@@ -235,9 +228,6 @@ def delete_archive(filename: str, current_user: User = Depends(get_current_user)
 
 @app.post("/api/archives/prune")
 def prune_archives(days: int = 180, current_user: User = Depends(get_current_user)):
-    """
-    Deletes files older than 'days' in THIS user's archive directory.
-    """
     cutoff = (datetime.now() - timedelta(days=days)).timestamp()
     user_dir = get_user_archive_dir(current_user.username)
 
@@ -249,30 +239,6 @@ def prune_archives(days: int = 180, current_user: User = Depends(get_current_use
             deleted_count += 1
 
     return {"status": "success", "deleted": deleted_count, "retention_days": days}
-
-
-# ─────────────────────────────────────────────
-# Users endpoints
-# ─────────────────────────────────────────────
-@app.get("/api/users")
-def get_all_users():
-    return list(load_users().keys())
-
-
-@app.post("/api/register")
-async def register(username: str = Form(...)):
-    if get_user(username):
-        raise HTTPException(status_code=400, detail="User already exists")
-    save_user_to_db(username)
-    access_token = create_access_token(data={"sub": username})
-    return {"access_token": access_token, "token_type": "bearer", "username": username}
-
-
-@app.post("/api/token")
-async def login_for_access_token(username: str = Form(...)):
-    # NOTE: no password in current design
-    access_token = create_access_token(data={"sub": username})
-    return {"access_token": access_token, "token_type": "bearer", "username": username}
 
 
 # ─────────────────────────────────────────────
@@ -298,28 +264,29 @@ def download_youtube_audio(url: str) -> tuple[str, str]:
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=False)
         title = info.get("title", "YouTube_Video")
+        print(f"Starting download: {title}", flush=True)
         ydl.download([url])
         final_filename = f"{output_template}.m4a"
         return final_filename, title
 
 
 # ─────────────────────────────────────────────
-# Transcribe endpoint (FIXED + STABLE)
+# Transcribe endpoint
 # ─────────────────────────────────────────────
 @app.post("/api/transcribe")
 async def transcribe_audio(
     file: UploadFile = File(None),
     youtube_url: str = Form(None),
     model_size: str = Form("large-v3"),
-    diarize: bool = Form(False),  # ignored (kept for frontend compatibility)
+    diarize: bool = Form(False),
     meeting_date: str = Form(None),
     current_user: User = Depends(get_current_user),
 ):
-    """
-    Accepts an uploaded file OR a YouTube URL.
-    Diarization is intentionally omitted for stability (per your request).
-    """
+    print(f"--- TRANSCRIPTION REQUEST RECEIVED ---", flush=True)
+    print(f"User: {current_user.username}, Model: {model_size}, Source: {'File' if file else 'YouTube'}", flush=True)
+
     if processing_lock.locked():
+        print("Blocked: Lock is currently held by another process.", flush=True)
         raise HTTPException(
             status_code=503,
             detail="System Busy: Another meeting is being processed. Please try again later.",
@@ -335,58 +302,57 @@ async def transcribe_audio(
         try:
             # 1) Prepare audio source
             if youtube_url:
-                print(f"Downloading YouTube URL: {youtube_url}")
+                print(f"Downloading YouTube URL: {youtube_url}", flush=True)
                 temp_audio_path, video_title = download_youtube_audio(youtube_url)
-
                 safe_title = "".join([c for c in video_title if c.isalnum() or c in (" ", ".", "_")]).replace(" ", "_")
                 original_filename = f"{safe_title}.m4a"
             else:
                 original_filename = file.filename or "uploaded_audio"
                 temp_audio_path = f"temp_{original_filename}"
+                print(f"Saving uploaded file to {temp_audio_path}...", flush=True)
                 with open(temp_audio_path, "wb") as f:
-                    f.write(await file.read())
+                    content = await file.read()
+                    f.write(content)
+                    print(f"File saved. Size: {len(content)} bytes", flush=True)
 
-            # 2) Faster-Whisper Pipeline (Pyannote-Free)
+            # 2) Faster-Whisper Pipeline
             from faster_whisper import WhisperModel
-
             device = "cuda" if torch.cuda.is_available() else "cpu"
 
-            # Clean CUDA state before loading model
             if device == "cuda":
                 torch.cuda.empty_cache()
                 torch.cuda.synchronize()
 
-            # A2000 + large-v3 is stable with float16; int8 can cause CUDA init issues
-            if model_size == "large-v3" and device == "cuda":
-                compute_type = "float16"
-            else:
-                compute_type = "int8"
+            compute_type = "float16" if (model_size == "large-v3" and device == "cuda") else "int8"
 
-            print(f"Received request. Model: {model_size}, Diarize (ignored): {diarize}, Date: {meeting_date}")
-            print(f"Loading faster-whisper model {model_size} on {device} ({compute_type})...")
-
+            print(f"Loading faster-whisper model {model_size} on {device} ({compute_type})...", flush=True)
             model = WhisperModel(model_size, device=device, compute_type=compute_type)
 
-            print("Transcribing...")
+            print("Starting Inference (transcribe)...", flush=True)
             segments, info = model.transcribe(temp_audio_path, beam_size=5)
 
             result_segments = []
             for segment in segments:
+                # Iterate so segments actually generate (it's a generator)
                 result_segments.append({
                     "start": segment.start,
                     "end": segment.end,
                     "text": segment.text,
                     "speaker": "Speaker"
                 })
+                # Mini-log for progress
+                if len(result_segments) % 10 == 0:
+                    print(f"Transcribed {len(result_segments)} segments...", flush=True)
 
-            # Free VRAM ASAP
+            print(f"Inference complete. Total segments: {len(result_segments)}", flush=True)
+
             del model
             gc.collect()
             if device == "cuda":
                 torch.cuda.empty_cache()
                 torch.cuda.synchronize()
 
-            # 3) Format output (no diarization → generic speaker label)
+            # 3) Format output
             formatted_result = []
             for seg in result_segments:
                 formatted_result.append(
@@ -410,22 +376,23 @@ async def transcribe_audio(
                 with open(archive_path, "w", encoding="utf-8") as f:
                     json.dump(formatted_result, f, indent=2, ensure_ascii=False)
 
-                print(f"Archived to: {archive_path}")
+                print(f"Successfully archived to: {archive_path}", flush=True)
             except Exception as e:
-                print(f"Archive failed: {e}")
+                print(f"Archive failed: {e}", flush=True)
 
             return {"transcription": formatted_result}
 
         except Exception as e:
             import traceback
+            print(f"CRITICAL ERROR: {e}", flush=True)
             traceback.print_exc()
             raise HTTPException(status_code=500, detail=str(e))
 
         finally:
-            # Clean up temp audio file
             if temp_audio_path and os.path.exists(temp_audio_path):
                 try:
                     os.remove(temp_audio_path)
+                    print(f"Cleaned up temp file: {temp_audio_path}", flush=True)
                 except Exception:
                     pass
 
@@ -441,15 +408,15 @@ async def download_pdf(transcription_data: List[TranscriptionSegment], clean: bo
     story = [Paragraph("Meeting Minutes" if clean else "Transcription", styles["h1"]), Spacer(1, 20)]
 
     if clean:
-        current_block = []
+        block = []
         for i, segment in enumerate(transcription_data):
-            current_block.append(segment.text.strip())
+            block.append(segment.text.strip())
             if (i + 1) % 5 == 0:
-                story.append(Paragraph(" ".join(current_block), styles["Normal"]))
+                story.append(Paragraph(" ".join(block), styles["Normal"]))
                 story.append(Spacer(1, 10))
-                current_block = []
-        if current_block:
-            story.append(Paragraph(" ".join(current_block), styles["Normal"]))
+                block = []
+        if block:
+            story.append(Paragraph(" ".join(block), styles["Normal"]))
     else:
         for segment in transcription_data:
             story.append(Paragraph(f"<b>[{segment.start}] {segment.speaker}:</b> {segment.text}", styles["Normal"]))
@@ -470,14 +437,14 @@ async def download_docx(transcription_data: List[TranscriptionSegment], clean: b
     document.add_heading("Meeting Minutes" if clean else "Transcription", 1)
 
     if clean:
-        current_block = []
+        block = []
         for i, segment in enumerate(transcription_data):
-            current_block.append(segment.text.strip())
+            block.append(segment.text.strip())
             if (i + 1) % 5 == 0:
-                document.add_paragraph(" ".join(current_block))
-                current_block = []
-        if current_block:
-            document.add_paragraph(" ".join(current_block))
+                document.add_paragraph(" ".join(block))
+                block = []
+        if block:
+            document.add_paragraph(" ".join(block))
     else:
         for segment in transcription_data:
             document.add_paragraph(f"[{segment.start}] {segment.speaker}: {segment.text}")
@@ -507,10 +474,6 @@ else:
     print("Warning: 'static' directory not found. Frontend will not be served.")
 
 
-# ─────────────────────────────────────────────
-# Entrypoint
-# ─────────────────────────────────────────────
 if __name__ == "__main__":
     import uvicorn
-
     uvicorn.run(app, host="0.0.0.0", port=8000)
