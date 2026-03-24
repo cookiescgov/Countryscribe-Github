@@ -55,18 +55,23 @@ echo "lxc.mount.entry: /dev/nvidia0 dev/nvidia0 none bind,optional,create=file" 
 echo "lxc.mount.entry: /dev/nvidiactl dev/nvidiactl none bind,optional,create=file" >> $CONF_FILE
 echo "lxc.mount.entry: /dev/nvidia-uvm dev/nvidia-uvm none bind,optional,create=file" >> $CONF_FILE
 
-# 3. Smart Library Discovery (Find paths on this specific host)
+# 3. Deep Library Discovery (Find symlinks and versioned targets)
 echo "Scanning host for NVIDIA driver libraries..."
-NV_ML=$(find /usr/lib -name "libnvidia-ml.so.1" 2>/dev/null | head -n 1)
-NV_CU=$(find /usr/lib -name "libcuda.so.1" 2>/dev/null | head -n 1)
-NV_SMI=$(command -v nvidia-smi 2>/dev/null)
+for LIB in "libnvidia-ml.so.1" "libcuda.so.1"; do
+    HOST_PATH=$(find /usr/lib -name "$LIB" 2>/dev/null | head -n 1)
+    if [ -n "$HOST_PATH" ]; then
+        # Mount the symlink
+        echo "lxc.mount.entry: $HOST_PATH ${HOST_PATH#/ } none bind,optional,ro,create=file" >> $CONF_FILE
+        # Resolve and mount the real versioned file
+        REAL_PATH=$(readlink -f "$HOST_PATH")
+        if [ "$REAL_PATH" != "$HOST_PATH" ]; then
+             echo "lxc.mount.entry: $REAL_PATH ${REAL_PATH#/ } none bind,optional,ro,create=file" >> $CONF_FILE
+        fi
+    fi
+done
 
-if [ -n "$NV_ML" ]; then
-    echo "lxc.mount.entry: $NV_ML ${NV_ML#/ } none bind,optional,ro,create=file" >> $CONF_FILE
-fi
-if [ -n "$NV_CU" ]; then
-    echo "lxc.mount.entry: $NV_CU ${NV_CU#/ } none bind,optional,ro,create=file" >> $CONF_FILE
-fi
+# 4. Mount nvidia-smi binary
+NV_SMI=$(command -v nvidia-smi 2>/dev/null)
 if [ -n "$NV_SMI" ]; then
     echo "lxc.mount.entry: $NV_SMI usr/bin/nvidia-smi none bind,optional,ro,create=file" >> $CONF_FILE
 fi
