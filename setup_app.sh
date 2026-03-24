@@ -48,6 +48,15 @@ nvidia-ctk config --set nvidia-container-cli.no-cgroups=true --in-place &>/dev/n
 
 systemctl restart docker
 
+# --- Verify Docker Runtime ---
+if docker info | grep -q "Runtimes:.* nvidia"; then
+    echo "✅ NVIDIA Runtime is correctly registered with Docker."
+else
+    echo "⚠️  NVIDIA Runtime NOT found in Docker. Initializing..."
+    nvidia-ctk runtime configure --runtime=docker &>/dev/null
+    systemctl restart docker
+fi
+
 # --- 4. Deploy County Scribe ---
 echo "📜  Fetching latest application source code..."
 mkdir -p /opt/county-scribe
