@@ -139,8 +139,15 @@ if [ "$CT_HW" == "gpu" ]; then
     # Safety Guard: Check for existing config
     if grep -q "lxc.cgroup2.devices.allow: c.*rwm" "$CONF_FILE"; then
         echo "⚠️  Existing GPU configuration detected in $CONF_FILE."
-        # Note: In a non-interactive one-liner, we'll proceed if it's a fresh install, 
-        # but the master menu version (install_proxmox.sh) should ideally be safe.
+        # Strip old GPU configs to prevent duplicates
+        sed -i '/# --- GPU PASSTHROUGH ---/d' "$CONF_FILE"
+        sed -i '/lxc.cgroup2.devices.allow: c .* rwm/d' "$CONF_FILE"
+        sed -i '/lxc.mount.entry: \/dev\/nvidia/d' "$CONF_FILE"
+        sed -i '/lxc.mount.entry: \/dev\/dri/d' "$CONF_FILE"
+        sed -i '/lxc.mount.entry: .*libnvidia-ml/d' "$CONF_FILE"
+        sed -i '/lxc.mount.entry: .*libcuda/d' "$CONF_FILE"
+        sed -i '/lxc.mount.entry: .*nvidia-smi/d' "$CONF_FILE"
+        sed -i '/lxc.hook.autodev:.*mount_hook.sh/d' "$CONF_FILE"
     fi
 
     # 1. Inject Stable Device IDs (NVIDIA Standard)
