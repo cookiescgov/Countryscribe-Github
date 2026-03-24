@@ -34,13 +34,18 @@ fi
 
 # --- 3. Install NVIDIA Container Toolkit ---
 echo "🚀  Configuring NVIDIA Container Toolkit for AI acceleration..."
-curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg \
+curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | gpg --batch --yes --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg \
   && curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | \
   sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
   tee /etc/apt/sources.list.d/nvidia-container-toolkit.list &>/dev/null
 apt-get update &>/dev/null
 apt-get install -y nvidia-container-toolkit &>/dev/null
 nvidia-ctk runtime configure --runtime=docker &>/dev/null
+
+# --- FIX: Unprivileged LXC Cgroup BPF Error ---
+# This prevents the "nvidia-container-cli: mount error: bpf_prog_query failed: operation not permitted"
+nvidia-ctk config --set nvidia-container-cli.no-cgroups=true --in-place &>/dev/null
+
 systemctl restart docker
 
 # --- 4. Deploy County Scribe ---
