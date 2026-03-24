@@ -7,8 +7,10 @@
 ---
 
 
-> [!WARNING]
-> **Work in Progress:** This project is currently under active development. Please wait until development is finalized before attempting deployment in a production environment.
+> [!IMPORTANT]
+> **Current Status:** This project is verified to work on **Proxmox LXC** with **NVIDIA RTX 2000 Ada (A2000)** hardware. If you are using different NVIDIA hardware, you may need to adapt the device IDs and major IDs in the configuration. 
+> 
+> **Note:** The universal deployment scripts for **Windows, Linux, and Mac (Standard Docker)** are currently provided as-is and have **not yet been tested**. 
 
 County Scribe is an open-source tool designed to provide local governments with a secure, self-hosted solution for transcribing public meetings.
  By running locally on your own hardware, it ensures that sensitive data never leaves your infrastructure while providing high-accuracy transcripts for official records.
