@@ -1,4 +1,4 @@
-# 🏛️ County Scribe 🏛️
+# 🏛️ County Scribe 2.0 🏛️
 
 **A resilient and specialized deployment package for local government transcription.**
 
