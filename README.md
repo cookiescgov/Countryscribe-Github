@@ -5,6 +5,7 @@
 > "Secure. Local. Transparent."
 
 ---
+<img width="3822" height="1770" alt="image" src="https://github.com/user-attachments/assets/0fcdca18-16f1-486e-b65d-0bcf0f163df4" />
 
 
 > [!IMPORTANT]
