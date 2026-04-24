@@ -2,7 +2,7 @@
 
 # ==========================================================================================
 # 🏛️  County Scribe (v2)
-# Created with Care by: Luke Cook, Starke County Government IT Department
+# Created by: Luke Cook, Starke County Government IT Department
 # ==========================================================================================
 
 set -e
