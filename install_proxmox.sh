@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # ==========================================================================================
-# 🏛️  County Scribe (郡書記)
+# 🏛️  County Scribe (v2)
 # Created with Care by: Luke Cook, Starke County Government IT Department
 # ==========================================================================================
 
@@ -9,19 +9,19 @@ set -e
 
 # --- UI Helper Functions ---
 function msg_box() {
-    whiptail --title "County Scribe (郡書記)" --msgbox "$1" 12 70
+    whiptail --title "County Scribe (V2)" --msgbox "$1" 12 70
 }
 
 function ask_yesno() {
-    whiptail --title "County Scribe (郡書記)" --yesno "$1" 12 70
+    whiptail --title "County Scribe (V2)" --yesno "$1" 12 70
 }
 
 function get_input() {
-    whiptail --title "County Scribe (郡書記)" --inputbox "$1" 12 70 "$2" 3>&1 1>&2 2>&3
+    whiptail --title "County Scribe (V2)" --inputbox "$1" 12 70 "$2" 3>&1 1>&2 2>&3
 }
 
 function get_password() {
-    whiptail --title "County Scribe (郡書記)" --passwordbox "$1" 12 70 3>&1 1>&2 2>&3
+    whiptail --title "County Scribe (V2)" --passwordbox "$1" 12 70 3>&1 1>&2 2>&3
 }
 
 # --- 1. Welcome & Introduction ---
@@ -36,7 +36,7 @@ cat <<EOF
      Created by: Luke Cook | Starke County Government IT
 EOF
 
-ACTION=$(whiptail --title "County Scribe (郡書記)" --menu "Welcome to County Scribe! Please select an action:" 15 70 3 \
+ACTION=$(whiptail --title "County Scribe (V2)" --menu "Welcome to County Scribe! Please select an action:" 15 70 3 \
     "install" "Install a new County Scribe Container" \
     "update" "Update Container OS and Application Code" \
     "gpu_enable" "Enable GPU support on an existing CPU container" 3>&1 1>&2 2>&3)
@@ -65,26 +65,26 @@ CT_HOSTNAME=$(get_input "Please provide a hostname (DNS friendly):" "county-scri
 CT_PASSWORD=$(get_password "Please provide a secure root password:")
 
 STORAGE_LIST=$(pvesm status | grep -E "dir|lvm|zfspool" | awk '{print $1 " " $2}' | xargs)
-CT_STORAGE=$(whiptail --title "County Scribe (郡書記)" --menu "Please select the storage for the container:" 15 70 6 $(echo $STORAGE_LIST) 3>&1 1>&2 2>&3)
+CT_STORAGE=$(whiptail --title "County Scribe (V2)" --menu "Please select the storage for the container:" 15 70 6 $(echo $STORAGE_LIST) 3>&1 1>&2 2>&3)
 
 CT_CORES=$(get_input "How many CPU cores may we allocate?" "4")
 CT_RAM=$(get_input "How many MiB of RAM?" "8192")
 CT_DISK=$(get_input "How many GB of disk space?" "40")
 
 # Ask for OS choice
-CT_OS=$(whiptail --title "County Scribe (郡書記)" --menu "Please select your preferred Host Operating System:" 15 70 2 \
+CT_OS=$(whiptail --title "County Scribe (V2)" --menu "Please select your preferred Host Operating System:" 15 70 2 \
     "debian-13" "Debian 13 (Trixie/Stable - Recommended)" \
     "ubuntu-24.04" "Ubuntu 24.04 LTS (Noble)" 3>&1 1>&2 2>&3)
 if [ -z "$CT_OS" ]; then CT_OS="debian-13"; fi
 
 # Ask for Hardware choice
-CT_HW=$(whiptail --title "County Scribe (郡書記)" --menu "Select the processing hardware for this container:" 15 70 2 \
+CT_HW=$(whiptail --title "County Scribe (V2)" --menu "Select the processing hardware for this container:" 15 70 2 \
     "gpu" "NVIDIA GPU Passthrough (Recommended & Fast)" \
     "cpu" "CPU Only (Universally Compatible but EXTREMELY Slow)" 3>&1 1>&2 2>&3)
 if [ -z "$CT_HW" ]; then CT_HW="gpu"; fi
 
 # Ask for Docker Build Output Style
-CT_STYLE=$(whiptail --title "County Scribe (郡書記)" --menu "Select the Docker Build Terminal Output Style:" 15 70 2 \
+CT_STYLE=$(whiptail --title "County Scribe (V2)" --menu "Select the Docker Build Terminal Output Style:" 15 70 2 \
     "default" "Default (Standard Docker Output)" \
     "verbose" "Verbose (Detailed Plain Text Logger)" 3>&1 1>&2 2>&3)
 if [ -z "$CT_STYLE" ]; then CT_STYLE="default"; fi
